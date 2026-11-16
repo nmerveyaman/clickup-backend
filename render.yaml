@@ -20,10 +20,18 @@ services:
     plan: free
     healthCheckPath: /actuator/health
     envVars:
-      - key: SPRING_DATASOURCE_URL
+      - key: SPRING_DATASOURCE_HOST
         fromDatabase:
           name: clickup-postgres
-          property: jdbcConnectionString
+          property: host
+      - key: SPRING_DATASOURCE_PORT
+        fromDatabase:
+          name: clickup-postgres
+          property: port
+      - key: SPRING_DATASOURCE_DB
+        fromDatabase:
+          name: clickup-postgres
+          property: database
       - key: SPRING_DATASOURCE_USERNAME
         fromDatabase:
           name: clickup-postgres
