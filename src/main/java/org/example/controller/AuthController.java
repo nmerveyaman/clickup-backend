@@ -43,10 +43,19 @@ public class AuthController {
                 .build();
     }
 
-    @GetMapping(
-            value = {"/api/auth/callback", "/api/v1/auth/callback", "/"},
-            params = "code")
-    public ResponseEntity<Void> handleOAuthCallback(@RequestParam("code") String code, HttpServletRequest request) {
+    /**
+     * ClickUp OAuth callback endpoint'i.
+     * Eğer 'code' parametresi varsa OAuth akışını tamamlar ve dashboard'a yönlendirir.
+     * Eğer doğrudan tarayıcıdan / adresine girildiyse (code yoksa) bilgi veya durum mesajı döner.
+     */
+    @GetMapping(value = {"/api/auth/callback", "/api/v1/auth/callback", "/"})
+    public ResponseEntity<?> handleOAuthCallback(
+            @RequestParam(value = "code", required = false) String code,
+            HttpServletRequest request) {
+
+        if (code == null || code.isBlank()) {
+            return ResponseEntity.ok("ClickUp Analytics Backend API is running!");
+        }
 
         log.info(
                 "HTTP GET {} OAuth callback isteği alındı. Remote IP: {}",
