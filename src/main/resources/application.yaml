@@ -65,8 +65,8 @@ app:
     webhook-dead-letter-queue: ${WEBHOOK_DEAD_LETTER_QUEUE:clickup.webhook.events.dlq}
 
 server:
-  # .env dosyasındaki BACKEND_PORT veya PORT değişkeninden okur
-  port: ${BACKEND_PORT:${PORT}}
+  # Render PORT değişkenini otomatik atar, yoksa BACKEND_PORT veya 8083 kullanılır
+  port: ${PORT:${BACKEND_PORT:8083}}
 
 management:
   endpoints:

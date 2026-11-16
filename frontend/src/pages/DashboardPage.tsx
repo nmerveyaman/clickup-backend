@@ -1941,7 +1941,7 @@ export default function DashboardPage() {
                 );
               })()}
 
-              {/* Work time, rollbacks, start and due dates */}
+              {/* Work time, time estimate, rollbacks, start and due dates */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-[#0d1117] p-3 rounded-xl border border-gray-800 flex flex-col justify-between">
                   <span className="text-[11px] text-gray-400 flex items-center gap-1.5">
@@ -1952,25 +1952,25 @@ export default function DashboardPage() {
                   </p>
                 </div>
 
-                {formatTimeEstimate(selectedTask.timeEstimate || selectedTask.time_estimate) ? (
-                  <div className="bg-[#0d1117] p-3 rounded-xl border border-gray-800 flex flex-col justify-between">
-                    <span className="text-[11px] text-gray-400 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-blue-400" /> Time estimate
-                    </span>
-                    <p className="text-sm font-mono font-bold text-blue-400 mt-1">
-                      {formatTimeEstimate(selectedTask.timeEstimate || selectedTask.time_estimate)}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="bg-[#0d1117] p-3 rounded-xl border border-gray-800 flex flex-col justify-between">
-                    <span className="text-[11px] text-gray-400 flex items-center gap-1.5">
-                      <RotateCcw className="w-3.5 h-3.5 text-purple-400" /> Rollbacks
-                    </span>
-                    <p className={`text-sm font-mono font-bold mt-1 ${selectedTask.rollbackCount > 0 ? 'text-amber-400' : 'text-gray-300'}`}>
-                      {selectedTask.rollbackCount || 0}
-                    </p>
-                  </div>
-                )}
+                <div className="bg-[#0d1117] p-3 rounded-xl border border-gray-800 flex flex-col justify-between">
+                  <span className="text-[11px] text-gray-400 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-blue-400" /> Time estimate
+                  </span>
+                  <p className="text-sm font-mono font-bold text-blue-400 mt-1">
+                    {formatTimeEstimate(selectedTask.timeEstimate || selectedTask.time_estimate) || (
+                      <span className="text-gray-500 font-sans text-xs">Not set</span>
+                    )}
+                  </p>
+                </div>
+
+                <div className="bg-[#0d1117] p-3 rounded-xl border border-gray-800 flex flex-col justify-between">
+                  <span className="text-[11px] text-gray-400 flex items-center gap-1.5">
+                    <RotateCcw className="w-3.5 h-3.5 text-purple-400" /> Rollbacks
+                  </span>
+                  <p className={`text-sm font-mono font-bold mt-1 ${selectedTask.rollbackCount > 0 ? 'text-amber-400' : 'text-gray-300'}`}>
+                    {selectedTask.rollbackCount || 0}
+                  </p>
+                </div>
 
                 <div className="bg-[#0d1117] p-3 rounded-xl border border-gray-800 flex flex-col justify-between">
                   <span className="text-[11px] text-gray-400 flex items-center gap-1.5">
@@ -1981,7 +1981,7 @@ export default function DashboardPage() {
                   </p>
                 </div>
 
-                <div className="bg-[#0d1117] p-3 rounded-xl border border-gray-800 flex flex-col justify-between">
+                <div className="bg-[#0d1117] p-3 rounded-xl border border-gray-800 flex flex-col justify-between col-span-2 sm:col-span-1">
                   <span className="text-[11px] text-gray-400 flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5 text-emerald-400" /> Due date
                   </span>
