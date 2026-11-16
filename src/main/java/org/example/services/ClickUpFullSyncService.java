@@ -46,13 +46,13 @@ public class ClickUpFullSyncService {
             log.info("Workspace {} için senkronize edilecek toplam liste sayısı: {}", workspaceId, allLists.size());
 
             for (Lists list : allLists) {
-                if (Boolean.TRUE.equals(list.getArchived())) {
-                    continue;
-                }
+                // Not: ClickUp'ta eski sprintler 'archived' olarak işaretlenmiş olsa bile görevlerini analiz için çekmeliyiz!
                 try {
+                    log.info("Liste senkronizasyonu başlatılıyor: ID={}, Name={}", list.getId(), list.getName());
                     taskService.syncListTasks(list.getId(), accessToken);
                 } catch (Exception ex) {
-                    log.error("Liste ID {} görevleri çekilirken hata oluştu, devam ediliyor: {}", list.getId(), ex.getMessage());
+                    log.error("Liste ID {} ({}) görevleri çekilirken hata oluştu, devam ediliyor: {}", 
+                            list.getId(), list.getName(), ex.getMessage());
                 }
             }
 
