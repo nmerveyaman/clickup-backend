@@ -11,12 +11,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/webhooks")
+@RequestMapping({"/api/webhooks", "/api/v1/webhook"})
 @RequiredArgsConstructor
 public class WebhookController {
     private final WebhookIngestionService webhookIngestionService;
 
-    @PostMapping("/clickup")
+    @PostMapping({"/clickup", ""})
     public ResponseEntity<Void> receiveClickUpWebhook(
             @RequestBody String rawPayload,
             @RequestHeader(name = "X-Signature", required = false) String signature) {

@@ -63,7 +63,7 @@ services:
       - key: CLICKUP_WEBHOOK_SECRET
         sync: false
       - key: CLICKUP_WEBHOOK_ENDPOINT
-        sync: false
+        value: "https://clickup-analytics-backend-fm11.onrender.com/api/webhooks/clickup"
       - key: JWT_SECRET
         generateValue: true
       - key: FRONTEND_URL
