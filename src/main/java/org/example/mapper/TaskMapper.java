@@ -23,6 +23,6 @@ public interface TaskMapper {
     @Mapping(target = "topLevelParent", ignore = true)
     @Mapping(target = "blockedByTask", ignore = true)
     @Mapping(target = "assignees", ignore = true)
-    @Mapping(target = "tags", expression = "java(dto.tags() != null ? dto.tags().stream().map(t -> t.name()).toList() : null)")
+    @Mapping(target = "tags", expression = "java(dto.tags() != null ? new java.util.ArrayList<>(dto.tags().stream().map(t -> t.name()).toList()) : new java.util.ArrayList<>())")
     void updateEntityFromDto(TaskResponseDto.TaskDto dto, @MappingTarget Task entity);
 }

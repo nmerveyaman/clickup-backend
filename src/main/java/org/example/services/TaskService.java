@@ -130,6 +130,8 @@ public class TaskService {
                     taskRepository.findById(taskDto.topLevelParent()).ifPresent(task::setTopLevelParent);
                 }
 
+                syncTaskAssignees(task, taskDto.assignees());
+
                 Task savedTask = taskRepository.save(task);
 
                 // Eğer bu task'ın subtask'ları DTO'da geldiyse onları da bağla
@@ -146,8 +148,6 @@ public class TaskService {
                         }
                     }
                 }
-
-                syncTaskAssignees(savedTask, taskDto.assignees());
 
                 String newStatus = savedTask.getStatusName();
                 String newPriority = savedTask.getPriority();
@@ -218,8 +218,8 @@ public class TaskService {
                         savedTask.getCreator() == null ? null : savedTask.getCreator().getId());
 
             } catch (Exception e) {
-                log.error("Task ID: {} kaydedilirken hata oluştu.", taskDto.id(), e);
-                throw new IllegalStateException("ClickUp görevi kaydedilemedi: " + taskDto.id(), e);
+                log.error("Task ID: {} kaydedilirken hata oluştu, sonraki göreve geçiliyor: {}", taskDto.id(), e.getMessage(), e);
+                // Tek bir görevdeki mapping veya FK hatası yüzünden TÜM listenin rollback olup iptal olmasını engelliyoruz
             }
         }
         int parentTaskCount = (int) tasks.stream()
@@ -258,9 +258,11 @@ public class TaskService {
             return;
         }
 
-        List<TaskAssignee> existingAssignees = taskAssigneeRepository.findByTaskId(task.getId());
-        if (!existingAssignees.isEmpty()) {
-            taskAssigneeRepository.deleteAll(existingAssignees);
+        // JPA CascadeType.ALL + orphanRemoval = true olduğu için koleksiyonu doğrudan yönetiyoruz
+        if (task.getAssignees() == null) {
+            task.setAssignees(new java.util.ArrayList<>());
+        } else {
+            task.getAssignees().clear();
         }
 
         if (assigneesDto.isEmpty()) {
@@ -280,7 +282,7 @@ public class TaskService {
 
                     TaskAssignee taskAssignee =
                             TaskAssignee.builder().task(task).user(user).build();
-                    taskAssigneeRepository.save(taskAssignee);
+                    task.getAssignees().add(taskAssignee);
                 } catch (NumberFormatException e) {
                     log.warn("Assignee User ID sayıya dönüştürülemedi: {}", userDto.id());
                 }
