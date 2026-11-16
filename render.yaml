@@ -1,14 +1,14 @@
-services:
+databases:
   # ----------------------------------------------------
   # 1. POSTGRESQL DATABASE
   # ----------------------------------------------------
-  - type: postgres
-    name: clickup-postgres
+  - name: clickup-postgres
     ipAllowList: [] # Sadece Render iç ağından erişim
     plan: free
     databaseName: clickup_db
     user: postgres
 
+services:
   # ----------------------------------------------------
   # 2. SPRING BOOT BACKEND
   # ----------------------------------------------------
@@ -72,4 +72,3 @@ services:
           type: web
           name: clickup-analytics-backend
           property: host
-
