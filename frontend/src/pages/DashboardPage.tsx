@@ -106,6 +106,12 @@ export default function DashboardPage() {
 
   // Keep the dashboard behind the login screen when there is no session.
   useEffect(() => {
+    const tokenFromUrl = queryParams.get('token');
+    if (tokenFromUrl) {
+      localStorage.setItem('accessToken', tokenFromUrl);
+      localStorage.setItem('isLoggedIn', 'true');
+    }
+
     if (!workspaceId && !userId) {
       navigate('/login');
     } else {
