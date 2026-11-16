@@ -4,9 +4,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.entity.Lists;
 import org.example.entity.User;
+import org.example.entity.UserTokens;
 import org.example.entity.WorkspaceMember;
 import org.example.repository.ListRepository;
+import org.example.repository.UserTokensRepository;
 import org.example.repository.WorkspaceMemberRepository;
+import org.example.services.ClickUpFullSyncService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,6 +25,8 @@ public class WorkspaceController {
 
     private final WorkspaceMemberRepository workspaceMemberRepository;
     private final ListRepository listRepository;
+    private final UserTokensRepository userTokensRepository;
+    private final ClickUpFullSyncService clickUpFullSyncService;
 
     /**
      * 1. Kullanıcının erişebildiği Workspace listesi
@@ -102,5 +107,40 @@ public class WorkspaceController {
                 .toList();
 
         return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 4. Workspace'i manuel olarak anında senkronize et
+     * POST /api/v1/workspaces/{workspaceId}/sync?userId=12345
+     */
+    @PostMapping("/{workspaceId}/sync")
+    public ResponseEntity<Map<String, Object>> triggerManualSync(
+            @PathVariable String workspaceId,
+            @RequestParam Long userId) {
+        log.info("Workspace manuel senkronizasyon tetiklendi: workspaceId={}, userId={}", workspaceId, userId);
+
+        UserTokens token = userTokensRepository.findByUserIdAndWorkspaceId(userId, workspaceId.trim())
+                .orElse(null);
+
+        if (token == null) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "Bu workspace için geçerli bir ClickUp token bulunamadı. Lütfen tekrar giriş yapın."
+            ));
+        }
+
+        try {
+            clickUpFullSyncService.syncWorkspaceData(String.valueOf(userId), workspaceId.trim(), token.getAccessToken());
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Senkronizasyon başarıyla tamamlandı!"
+            ));
+        } catch (Exception e) {
+            log.error("Manuel senkronizasyon başarısız: ", e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "success", false,
+                    "message", "Senkronizasyon hatası: " + e.getMessage()
+            ));
+        }
     }
 }

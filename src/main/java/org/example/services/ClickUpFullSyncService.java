@@ -41,15 +41,18 @@ public class ClickUpFullSyncService {
             }
             log.info("Workspace {} için klasör ve listeler senkronize edildi.", workspaceId);
 
-            for (Space space : workspaceSpaces) {
-                if (Boolean.TRUE.equals(space.getArchived())) {
+            // Workspace altındaki TÜM listeleri (hem klasör içi hem klasörsüz) çek
+            List<Lists> allLists = listRepository.findByWorkspaceId(workspaceId);
+            log.info("Workspace {} için senkronize edilecek toplam liste sayısı: {}", workspaceId, allLists.size());
+
+            for (Lists list : allLists) {
+                if (Boolean.TRUE.equals(list.getArchived())) {
                     continue;
                 }
-                for (Lists list : listRepository.findBySpaceId(space.getId())) {
-                    if (Boolean.TRUE.equals(list.getArchived())) {
-                        continue;
-                    }
+                try {
                     taskService.syncListTasks(list.getId(), accessToken);
+                } catch (Exception ex) {
+                    log.error("Liste ID {} görevleri çekilirken hata oluştu, devam ediliyor: {}", list.getId(), ex.getMessage());
                 }
             }
 
