@@ -1,6 +1,11 @@
-const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
+let rawBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
 
-// Eğer Render'dan gelen adres başında http/https yoksa 'https://' ekler (örn: clickup-analytics-backend-fm11.onrender.com)
+// Eğer Render iç ağ host adı verdiyse (örn: clickup-analytics-backend-fm11) ve sonunda nokta/alan adı yoksa, .onrender.com ekle
+if (rawBaseUrl && !rawBaseUrl.includes('.') && !rawBaseUrl.includes('localhost')) {
+  rawBaseUrl = `${rawBaseUrl}.onrender.com`;
+}
+
+// Başında http/https yoksa https:// ekle
 export const BASE_URL = rawBaseUrl
   ? (rawBaseUrl.startsWith('http://') || rawBaseUrl.startsWith('https://')
       ? rawBaseUrl
