@@ -44,7 +44,7 @@ public class AuthController {
     }
 
     @GetMapping(
-            value = {"/api/auth/callback", "/"},
+            value = {"/api/auth/callback", "/api/v1/auth/callback", "/"},
             params = "code")
     public ResponseEntity<Void> handleOAuthCallback(@RequestParam("code") String code, HttpServletRequest request) {
 

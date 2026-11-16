@@ -40,7 +40,7 @@ public class SecurityConfig {
                 // Yetkilendirme kuralları
                 .authorizeHttpRequests(auth -> auth
                         // OAuth giriş ve callback endpoint'leri herkese açık
-                        .requestMatchers("/login", "/api/auth/**").permitAll()
+                        .requestMatchers("/login", "/api/auth/**", "/api/v1/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/").permitAll()
                         // SSE bildirim akışı
                         .requestMatchers("/api/events/stream").permitAll()
