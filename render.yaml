@@ -48,6 +48,10 @@ services:
         sync: false
       - key: SPRING_RABBITMQ_PASSWORD
         sync: false
+      - key: SPRING_RABBITMQ_VIRTUAL_HOST
+        sync: false
+      - key: SPRING_RABBITMQ_SSL_ENABLED
+        value: "false"
       - key: CLICKUP_CLIENT_ID
         sync: false
       - key: CLICKUP_CLIENT_SECRET
