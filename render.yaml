@@ -1,0 +1,75 @@
+services:
+  # ----------------------------------------------------
+  # 1. POSTGRESQL DATABASE
+  # ----------------------------------------------------
+  - type: postgres
+    name: clickup-postgres
+    ipAllowList: [] # Sadece Render iç ağından erişim
+    plan: free
+    databaseName: clickup_db
+    user: postgres
+
+  # ----------------------------------------------------
+  # 2. SPRING BOOT BACKEND
+  # ----------------------------------------------------
+  - type: web
+    name: clickup-analytics-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_DATASOURCE_URL
+        fromDatabase:
+          name: clickup-postgres
+          property: connectionString
+      - key: SPRING_DATASOURCE_USERNAME
+        fromDatabase:
+          name: clickup-postgres
+          property: user
+      - key: SPRING_DATASOURCE_PASSWORD
+        fromDatabase:
+          name: clickup-postgres
+          property: password
+      - key: SPRING_RABBITMQ_HOST
+        sync: false
+      - key: SPRING_RABBITMQ_PORT
+        value: 5672
+      - key: SPRING_RABBITMQ_USERNAME
+        sync: false
+      - key: SPRING_RABBITMQ_PASSWORD
+        sync: false
+      - key: CLICKUP_CLIENT_ID
+        sync: false
+      - key: CLICKUP_CLIENT_SECRET
+        sync: false
+      - key: CLICKUP_API_TOKEN
+        sync: false
+      - key: CLICKUP_REDIRECT_URI
+        sync: false
+      - key: CLICKUP_WEBHOOK_SECRET
+        sync: false
+      - key: CLICKUP_WEBHOOK_ENDPOINT
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+
+  # ----------------------------------------------------
+  # 3. REACT + VITE + NGINX FRONTEND
+  # ----------------------------------------------------
+  - type: web
+    name: clickup-analytics-frontend
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    plan: free
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: clickup-analytics-backend
+          property: host
+
