@@ -23,7 +23,7 @@ services:
       - key: SPRING_DATASOURCE_URL
         fromDatabase:
           name: clickup-postgres
-          property: connectionString
+          property: jdbcConnectionString
       - key: SPRING_DATASOURCE_USERNAME
         fromDatabase:
           name: clickup-postgres
