@@ -39,4 +39,9 @@ bin/
 ### Mac OS ###
 .DS_Store
 
+.env
+.env.*
 .env/
+node_modules/
+dist/
+compose.backend-dev.yaml

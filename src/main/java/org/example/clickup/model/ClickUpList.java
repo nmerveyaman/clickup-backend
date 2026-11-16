@@ -14,7 +14,6 @@ public record ClickUpList(
         ListStatus status,
         ListPriority priority,
         JsonNode assignee,
-        Integer taskCount,
         Long dueDate,
         Boolean dueDateTime,
         Long startDate,

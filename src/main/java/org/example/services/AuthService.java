@@ -4,7 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.sql.Timestamp;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.example.Client.Client;
+import org.example.client.ClickupClient;
 import org.example.config.JwtProperties;
 import org.example.dto.AuthResponseDto;
 import org.example.dto.OAuthDto;
@@ -30,7 +30,7 @@ public class AuthService {
 
     private static final Parser UA_PARSER = new Parser();
 
-    private final Client client;
+    private final ClickupClient client;
     private final UserRepository userRepository;
     private final UserTokensRepository userTokensRepository;
     private final WorkspaceMemberRepository workspaceMemberRepository;
@@ -40,6 +40,7 @@ public class AuthService {
     private final WorkspaceService workspaceService;
     private final WorkspaceVerificationService workspaceVerificationService;
     private final ClickUpFullSyncService clickUpFullSyncService;
+    private final ClickUpWebhookSyncService clickUpWebhookSyncService;
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
 
@@ -99,6 +100,17 @@ public class AuthService {
             tokenEntity.setAccessToken(tokenResponse.accessToken());
             tokenEntity.setUpdatedAt(new Timestamp(System.currentTimeMillis()));
             userTokensRepository.save(tokenEntity);
+
+            try {
+                clickUpWebhookSyncService.syncWorkspaceWebhook(tokenEntity);
+            } catch (RuntimeException e) {
+                log.error(
+                        "OAuth girişi tamamlandı ancak webhook senkronizasyonu başarısız oldu. "
+                                + "User ID: {}, Workspace ID: {}",
+                        user.getId(),
+                        workspaceId,
+                        e);
+            }
 
             try {
                 clickUpFullSyncService.syncWorkspaceData(

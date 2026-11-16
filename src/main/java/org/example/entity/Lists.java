@@ -37,12 +37,6 @@ public class Lists {
     @Column(name = "due_date")
     private String dueDate;
 
-    @Column(name = "task_count")
-    private Integer taskCount;
-
-    @Column(name = "parent_task_count")
-    private Integer parentTaskCount;
-
     @Column(name = "total_task_count")
     private Integer totalTaskCount;
 

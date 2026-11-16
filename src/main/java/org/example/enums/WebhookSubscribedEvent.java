@@ -11,11 +11,12 @@ public enum WebhookSubscribedEvent {
     TASK_STATUS_UPDATED("taskStatusUpdated"),
     TASK_PRIORITY_UPDATED("taskPriorityUpdated"),
     TASK_ASSIGNEE_UPDATED("taskAssigneeUpdated"),
-    TASK_DUE_DATE_UPDATED("taskDueDateUpdated"),
+    TASK_DUE_DATE_UPDATED("taskDueDateUpdated"),//şart mı
     TASK_TIME_ESTIMATE_UPDATED("taskTimeEstimateUpdated"),
-    TASK_TIME_TRACKED_UPDATED("taskTimeTrackedUpdated"),
+    TASK_TIME_TRACKED_UPDATED("taskTimeTrackedUpdated"),//şart mı
     TASK_MOVED("taskMoved"),
-    TASK_TAG_UPDATED("taskTagUpdated"),
+    TASK_TAG_UPDATED("taskTagUpdated"),//şart mı
+
 
     LIST_CREATED("listCreated"),
     LIST_UPDATED("listUpdated"),
@@ -28,6 +29,7 @@ public enum WebhookSubscribedEvent {
     SPACE_CREATED("spaceCreated"),
     SPACE_UPDATED("spaceUpdated"),
     SPACE_DELETED("spaceDeleted"),
+
 
     UNSUPPORTED("unsupported");
 

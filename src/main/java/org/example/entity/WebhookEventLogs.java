@@ -32,6 +32,9 @@ public class WebhookEventLogs {
     @Column(name = "entity_id")
     private String entityId;
 
+    @Column(name = "history_item_id")
+    private String historyItemId;
+
     @Column(name = "status")
     private String status;
 

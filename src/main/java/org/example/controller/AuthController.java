@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.config.ClickUpApiProperties;
 import org.example.dto.AuthResponseDto;
 import org.example.services.AuthService;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,9 +21,27 @@ import org.springframework.web.util.UriComponentsBuilder;
 public class AuthController {
 
     private final AuthService authService;
+    private final ClickUpApiProperties clickUpApiProperties;
 
     @Value("${app.frontend-url:http://localhost/dashboard}")
     private String frontendUrl;
+
+    /**
+     * Frontend Login butonuna basıldığında ClickUp OAuth izin sayfasına yönlendirir.
+     */
+    @GetMapping({"/login", "/api/auth/login"})
+    public ResponseEntity<Void> redirectToClickUpOAuth() {
+        String oauthUrl = UriComponentsBuilder.fromUriString("https://app.clickup.com/api")
+                .queryParam("client_id", clickUpApiProperties.clientId())
+                .queryParam("redirect_uri", clickUpApiProperties.redirectUri())
+                .build()
+                .toUriString();
+
+        log.info("Kullanıcı ClickUp OAuth girişine yönlendiriliyor: {}", oauthUrl);
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(URI.create(oauthUrl))
+                .build();
+    }
 
     @GetMapping(
             value = {"/api/auth/callback", "/"},

@@ -25,7 +25,7 @@ public class Webhook {
     @Column(name = "endpoint_url", nullable = false, length = 500)
     private String endpointUrl; // URL ? belkide dbde olmamalı just env enough
 
-    @OneToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user", nullable = false)
     private User user;
 

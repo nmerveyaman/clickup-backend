@@ -25,8 +25,8 @@ public class HierarchyEvent {
     @Column(name = "event_type", nullable = false, length = 100)
     private String eventType;
 
-    @Column(name = "field_changed", length = 100)
-    private String fieldChanged;
+    @Column(name = "field_name", length = 100)
+    private String fieldName;
 
     @Column(name = "old_value", columnDefinition = "TEXT")
     private String oldValue;
@@ -40,8 +40,8 @@ public class HierarchyEvent {
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
-    @Column(name = "delivery_id", length = 100)
-    private String deliveryId;
+    @Column(name = "idempotency_key", length = 255, unique = true)
+    private String idempotencyKey;
 
     @Column(name = "trigger_source", length = 50)
     @Builder.Default

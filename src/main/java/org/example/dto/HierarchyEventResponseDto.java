@@ -15,11 +15,11 @@ public class HierarchyEventResponseDto {
     private String entityType;
     private String entityId;
     private String eventType;
-    private String fieldChanged;
+    private String fieldName;
     private String oldValue;
     private String newValue;
     private Long changedByUserId;
-    private String deliveryId;
+    private String idempotencyKey;
     private String triggerSource;
     private OffsetDateTime createdAt;
 }

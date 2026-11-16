@@ -12,7 +12,6 @@ public record Folder(
         Boolean overrideStatuses,
         Boolean hidden,
         HierarchyRef space,
-        Integer taskCount,
         Boolean archived,
         List<Status> statuses,
         List<ClickUpList> lists,

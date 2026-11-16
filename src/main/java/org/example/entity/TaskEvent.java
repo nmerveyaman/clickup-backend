@@ -22,33 +22,23 @@ public class TaskEvent {
     @Column(name = "event_type", nullable = false)
     private String eventType;
 
-    @Column(name = "from_status", length = 100)
-    private String fromStatus;
+    @Column(name = "field_name", length = 100)
+    private String fieldName;
 
-    @Column(name = "to_status", length = 100)
-    private String toStatus;
+    @Column(name = "old_value", columnDefinition = "TEXT")
+    private String oldValue;
 
-    @Column(name = "from_priority", length = 50)
-    private String fromPriority;
-
-    @Column(name = "to_priority", length = 50)
-    private String toPriority;
-
-    @Column(name = "from_assignee")
-    private Long fromAssignee;
-
-    @Column(name = "to_assignee")
-    private Long toAssignee;
+    @Column(name = "new_value", columnDefinition = "TEXT")
+    private String newValue;
 
     @Column(name = "changed_by_user_id")
     private Long changedByUserId;
 
     @Column(name = "timestamp", length = 100)
-    private String timestamp; // ClickUp epoch millis string
+    private String timestamp;
 
-    // İzlenebilirlik Alanları
-    @Column(name = "delivery_id", length = 100)
-    private String deliveryId;
+    @Column(name = "idempotency_key", length = 255, unique = true)
+    private String idempotencyKey;
 
     @Column(name = "history_item_id", length = 100)
     private String historyItemId;

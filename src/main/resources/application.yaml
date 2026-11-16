@@ -2,15 +2,18 @@ spring:
   application:
     name: clickup-analytics
 
+  # Kök dizindeki .env dosyasını otomatik olarak konfigürasyona dahil eder
+  config:
+    import: "optional:file:.env[.properties]"
+
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/clickup_db}
-    username: ${SPRING_DATASOURCE_USERNAME:postgres}
-    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      # Veritabanı tablolarını Hibernate otomatik oluşturmasın, Flyway doğrulasın
       ddl-auto: update
     show-sql: true
     properties:
@@ -18,16 +21,15 @@ spring:
         format_sql: true
 
   flyway:
-    enabled: true
-    baseline-on-migrate: true
+    enabled: false
 
   rabbitmq:
-    host: ${SPRING_RABBITMQ_HOST:localhost}
-    port: ${SPRING_RABBITMQ_PORT:5672}
-    username: ${SPRING_RABBITMQ_USERNAME:guest}
-    password: ${SPRING_RABBITMQ_PASSWORD:guest}
+    host: ${SPRING_RABBITMQ_HOST}
+    port: ${SPRING_RABBITMQ_PORT}
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
 
-# Custom ClickUp Konfigürasyonu (kök seviyede olmalı)
+# Custom ClickUp Konfigürasyonu
 clickup:
   api:
     base-url: https://api.clickup.com/api/v2
@@ -45,6 +47,7 @@ clickup:
     redirect-uri: ${CLICKUP_REDIRECT_URI}
   webhook:
     secret: ${CLICKUP_WEBHOOK_SECRET}
+    endpoint: ${CLICKUP_WEBHOOK_ENDPOINT:}
 
 jwt:
   # 1 yıl boyunca sabit kalacak 256-bit güvenli anahtar (HS256)
@@ -55,9 +58,15 @@ jwt:
 app:
   # OAuth sonrası kullanıcıların yönlendirileceği Frontend Dashboard adresi
   frontend-url: ${FRONTEND_URL:http://localhost/dashboard}
+  sync:
+    interval-ms: ${CLICKUP_SYNC_INTERVAL_MS:600000}
+  rabbitmq:
+    webhook-queue: ${WEBHOOK_QUEUE:clickup.webhook.events}
+    webhook-dead-letter-queue: ${WEBHOOK_DEAD_LETTER_QUEUE:clickup.webhook.events.dlq}
 
 server:
-  port: ${PORT:8083}
+  # .env dosyasındaki BACKEND_PORT veya PORT değişkeninden okur
+  port: ${BACKEND_PORT:${PORT}}
 
 management:
   endpoints:
@@ -68,5 +77,5 @@ management:
 logging:
   level:
     root: INFO
-    org.example: DEBUG # Kendi paketinin log seviyesini DEBUG yapıyoruz
-    org.hibernate.SQL: DEBUG # SQL sorgularını detaylı görmek istersen
+    org.example: DEBUG
+    org.hibernate.SQL: DEBUG

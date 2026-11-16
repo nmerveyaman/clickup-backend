@@ -1,6 +1,8 @@
 package org.example.services;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.entity.Lists;
@@ -30,13 +32,23 @@ public class ClickUpFullSyncService {
             List<Space> workspaceSpaces = spaceRepository.findByWorkspaceId(workspaceId);
 
             for (Space space : workspaceSpaces) {
-                folderService.syncFolders(space.getId(), accessToken);
-                listService.syncSpaceLists(space.getId(), accessToken);
+                if (Boolean.TRUE.equals(space.getArchived())) {
+                    continue;
+                }
+                Set<String> currentListIds = new HashSet<>(folderService.syncFolders(space.getId(), accessToken));
+                currentListIds.addAll(listService.syncSpaceLists(space.getId(), accessToken));
+                listService.archiveMissingLists(space.getId(), currentListIds);
             }
             log.info("Workspace {} için klasör ve listeler senkronize edildi.", workspaceId);
 
             for (Space space : workspaceSpaces) {
+                if (Boolean.TRUE.equals(space.getArchived())) {
+                    continue;
+                }
                 for (Lists list : listRepository.findBySpaceId(space.getId())) {
+                    if (Boolean.TRUE.equals(list.getArchived())) {
+                        continue;
+                    }
                     taskService.syncListTasks(list.getId(), accessToken);
                 }
             }
