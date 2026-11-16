@@ -50,7 +50,7 @@ clickup:
     client-secret: ${CLICKUP_CLIENT_SECRET}
     redirect-uri: ${CLICKUP_REDIRECT_URI}
   webhook:
-    secret: ${CLICKUP_WEBHOOK_SECRET}
+    secret: ${CLICKUP_WEBHOOK_SECRET:}
     endpoint: ${CLICKUP_WEBHOOK_ENDPOINT:}
 
 jwt:
