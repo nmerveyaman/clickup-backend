@@ -3,10 +3,10 @@ databases:
   # 1. POSTGRESQL DATABASE
   # ----------------------------------------------------
   - name: clickup-postgres
-    ipAllowList: [] # Sadece Render iç ağından erişim
+    ipAllowList: [] # Sadece Render ic agindan erisim
     plan: free
     databaseName: clickup_db
-    user: postgres
+    user: clickup_user
 
 services:
   # ----------------------------------------------------
