@@ -118,7 +118,6 @@ public class ClickupClient {
                             .path("/list/{listId}/task")
                             .queryParam("subtasks", true)
                             .queryParam("include_closed", true)
-                            .queryParam("archived", false)
                             .queryParam("page", requestedPage)
                             .build(listId))
                     .header("Authorization", accessToken)

@@ -22,8 +22,8 @@ public interface TaskRepository extends JpaRepository<Task, String> {
     @Query("SELECT t FROM Task t WHERE t.parent.id IN :parentIds")
     List<Task> findByParentIdIn(@Param("parentIds") List<String> parentIds);
 
-    @Query("SELECT t.parent.id, COUNT(t) FROM Task t WHERE t.parent.id IN :parentIds GROUP BY t.parent.id")
-    List<Object[]> countSubtasksByParentIds(@Param("parentIds") List<String> parentIds);
+    @Query("SELECT t.id, tag FROM Task t JOIN t.tags tag WHERE t.id IN :taskIds")
+    List<Object[]> findTagsByTaskIdIn(@Param("taskIds") List<String> taskIds);
 
     List<Task> findByStatusName(String statusName);
 

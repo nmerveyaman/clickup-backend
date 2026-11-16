@@ -4,22 +4,22 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.clickup.webhook.HistoryItem;
 import org.example.clickup.webhook.WebhookEvent;
 import org.example.clickup.webhook.WebhookEventType;
-import org.example.dto.WebhookIngestionPayload;
-import org.example.entity.HierarchyEvent;
-import org.example.entity.Task;
-import org.example.entity.TaskEvent;
 import org.example.client.ClickupClient;
 import org.example.dto.ListResponseDto;
 import org.example.dto.TaskResponseDto;
+import org.example.dto.WebhookIngestionPayload;
+import org.example.entity.HierarchyEvent;
 import org.example.entity.Lists;
 import org.example.entity.Task;
 import org.example.entity.TaskEvent;
@@ -318,43 +318,12 @@ public class WebhookEventProcessor {
         }
 
         // 4. Atanan Kişi (Assignee) Güncellemesi
-        if ("assignee".equalsIgnoreCase(field) || event.event() == WebhookEventType.TASK_ASSIGNEE_UPDATED) {
-            // Mevcut tüm assignee'leri sil
-            List<org.example.entity.TaskAssignee> existing = taskAssigneeRepository.findByTaskId(task.getId());
-            if (!existing.isEmpty()) {
-                taskAssigneeRepository.deleteAll(existing);
-                taskAssigneeRepository.flush();
-            }
-
-            // ClickUp API'den güncel assignee listesini çek
-            String accessToken = resolveAccessToken(payload);
-            if (accessToken != null) {
-                try {
-                    TaskResponseDto.TaskDto freshTask = clickupClient.getTask(task.getId(), accessToken);
-                    if (freshTask != null && freshTask.assignees() != null) {
-                        for (org.example.dto.UserDto userDto : freshTask.assignees()) {
-                            if (userDto.id() != null) {
-                                User user = userRepository.findById(userDto.id()).orElseGet(User::new);
-                                user.setId(userDto.id());
-                                if (userDto.username() != null) user.setUsername(userDto.username());
-                                if (userDto.email() != null) user.setEmail(userDto.email());
-                                if (userDto.profilePicture() != null) user.setProfilePicture(userDto.profilePicture());
-                                userRepository.save(user);
-
-                                org.example.entity.TaskAssignee ta = org.example.entity.TaskAssignee.builder()
-                                        .task(task)
-                                        .user(user)
-                                        .assignedAt(new java.sql.Timestamp(System.currentTimeMillis()))
-                                        .build();
-                                taskAssigneeRepository.save(ta);
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    log.warn("Assignee güncelleme için ClickUp API çağrısı başarısız: taskId={}", task.getId(), e);
-                }
-            }
-            log.info("Task {} assignee'leri webhook üzerinden güncellendi.", task.getId());
+        if ("assignee_add".equalsIgnoreCase(field)) {
+            updateTaskAssignee(task, history == null ? null : history.after(), true);
+        } else if ("assignee_rem".equalsIgnoreCase(field)) {
+            updateTaskAssignee(task, history == null ? null : history.before(), false);
+        } else if ("assignee".equalsIgnoreCase(field) || event.event() == WebhookEventType.TASK_ASSIGNEE_UPDATED) {
+            syncTaskAssigneesFromClickUp(task, payload);
         }
 
         // 5. Etiket (Tag) Güncellemesi
@@ -395,6 +364,126 @@ public class WebhookEventProcessor {
 
         // 5. SSE Canlı Bildirimini Frontend'e Gönder
         broadcastToSse(task, event, fromStatus, toStatus, fromPriority, toPriority, payload);
+    }
+
+    private void syncTaskAssigneesFromClickUp(Task task, WebhookIngestionPayload payload) {
+        String accessToken = resolveAccessToken(payload);
+        if (accessToken == null) {
+            log.warn("Assignee güncellemesi atlandı; erişim token'ı bulunamadı: taskId={}", task.getId());
+            return;
+        }
+
+        TaskResponseDto.TaskDto freshTask;
+        try {
+            freshTask = clickupClient.getTask(task.getId(), accessToken);
+        } catch (Exception e) {
+            log.warn("Assignee güncelleme için ClickUp API çağrısı başarısız: taskId={}", task.getId(), e);
+            return;
+        }
+        if (freshTask == null || freshTask.assignees() == null) {
+            log.warn(
+                    "Assignee güncellemesi atlandı; ClickUp güncel assignee listesini döndürmedi: taskId={}",
+                    task.getId());
+            return;
+        }
+
+        Set<Long> desiredUserIds = new HashSet<>();
+        for (org.example.dto.UserDto userDto : freshTask.assignees()) {
+            if (userDto != null && userDto.id() != null) {
+                desiredUserIds.add(userDto.id());
+            }
+        }
+
+        List<org.example.entity.TaskAssignee> existing = taskAssigneeRepository.findByTaskId(task.getId());
+        Map<Long, org.example.entity.TaskAssignee> existingByUserId = new HashMap<>();
+        List<org.example.entity.TaskAssignee> removed = new java.util.ArrayList<>();
+        for (org.example.entity.TaskAssignee assignment : existing) {
+            Long userId = assignment.getUser() == null ? null : assignment.getUser().getId();
+            if (userId == null || !desiredUserIds.contains(userId)) {
+                removed.add(assignment);
+            } else {
+                existingByUserId.putIfAbsent(userId, assignment);
+            }
+        }
+        if (!removed.isEmpty()) {
+            taskAssigneeRepository.deleteAll(removed);
+        }
+
+        for (org.example.dto.UserDto userDto : freshTask.assignees()) {
+            if (userDto == null || userDto.id() == null) {
+                continue;
+            }
+
+            User user = userRepository.findById(userDto.id()).orElseGet(User::new);
+            user.setId(userDto.id());
+            if (userDto.username() != null) user.setUsername(userDto.username());
+            if (userDto.email() != null) user.setEmail(userDto.email());
+            if (userDto.profilePicture() != null) user.setProfilePicture(userDto.profilePicture());
+            userRepository.save(user);
+
+            if (!existingByUserId.containsKey(userDto.id())) {
+                org.example.entity.TaskAssignee assignment = org.example.entity.TaskAssignee.builder()
+                        .task(task)
+                        .user(user)
+                        .assignedAt(new java.sql.Timestamp(System.currentTimeMillis()))
+                        .build();
+                taskAssigneeRepository.save(assignment);
+                existingByUserId.put(userDto.id(), assignment);
+            }
+        }
+        log.info("Task {} assignee'leri webhook üzerinden güncellendi.", task.getId());
+    }
+
+    private void updateTaskAssignee(Task task, JsonNode assigneeNode, boolean assigned) {
+        Long assigneeId;
+        try {
+            assigneeId = userId(assigneeNode);
+        } catch (IllegalArgumentException e) {
+            log.warn("Webhook assignee ID'si geçersiz: taskId={}", task.getId(), e);
+            return;
+        }
+        if (assigneeId == null) {
+            log.warn("Webhook assignee ID'si bulunamadı: taskId={}", task.getId());
+            return;
+        }
+
+        List<org.example.entity.TaskAssignee> existing = taskAssigneeRepository.findByTaskId(task.getId());
+        if (!assigned) {
+            List<org.example.entity.TaskAssignee> removed = existing.stream()
+                    .filter(assignment -> assignment.getUser() != null
+                            && assigneeId.equals(assignment.getUser().getId()))
+                    .toList();
+            if (!removed.isEmpty()) {
+                taskAssigneeRepository.deleteAll(removed);
+            }
+            log.info("Task {} assignee {} kaldırıldı.", task.getId(), assigneeId);
+            return;
+        }
+
+        User user = userRepository.findById(assigneeId).orElseGet(User::new);
+        user.setId(assigneeId);
+        JsonNode username = assigneeNode.get("username");
+        JsonNode email = assigneeNode.get("email");
+        JsonNode profilePicture = assigneeNode.has("profilePicture")
+                ? assigneeNode.get("profilePicture")
+                : assigneeNode.get("profile_picture");
+        if (username != null && !username.isNull()) user.setUsername(username.asText());
+        if (email != null && !email.isNull()) user.setEmail(email.asText());
+        if (profilePicture != null && !profilePicture.isNull()) user.setProfilePicture(profilePicture.asText());
+        userRepository.save(user);
+
+        boolean alreadyAssigned = existing.stream()
+                .anyMatch(assignment -> assignment.getUser() != null
+                        && assigneeId.equals(assignment.getUser().getId()));
+        if (!alreadyAssigned) {
+            org.example.entity.TaskAssignee assignment = org.example.entity.TaskAssignee.builder()
+                    .task(task)
+                    .user(user)
+                    .assignedAt(new java.sql.Timestamp(System.currentTimeMillis()))
+                    .build();
+            taskAssigneeRepository.save(assignment);
+        }
+        log.info("Task {} assignee {} eklendi.", task.getId(), assigneeId);
     }
 
     private void syncResolvedSubtaskStatuses(

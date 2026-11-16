@@ -61,6 +61,7 @@ public class AnalyticsController {
                 ));
 
         List<Task> tasks = taskRepository.findByListId(cleanListId);
+        log.info("Liste ID '{}' için veritabanında {} adet görev bulundu.", cleanListId, tasks.size());
 
         SprintAnalyticsResponse response = analyticsService.getSprintComprehensiveAnalytics(listEntity, tasks);
         return ResponseEntity.ok(response);

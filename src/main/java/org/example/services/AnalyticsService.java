@@ -189,7 +189,25 @@ public class AnalyticsService {
                 .map(a -> a.getUser().getId())
                 .toList();
 
-        return getComprehensiveAnalytics(task, events, knownStatusTypes, effectiveSprintStart, assignees);
+        TaskAnalyticsResponse response =
+                getComprehensiveAnalytics(task, events, knownStatusTypes, effectiveSprintStart, assignees);
+        List<Task> childTasks = taskRepository.findByParentId(task.getId());
+        response.setSubtaskCount(childTasks.size());
+        response.setSubtasks(childTasks.stream()
+                .map(child -> new TaskAnalyticsResponse.SubtaskItemDto(
+                        child.getId(), child.getName(), child.getStatusName(), child.getStatusType()))
+                .toList());
+        if (task.getParent() != null
+                && (response.getParentName() == null || response.getParentName().isBlank())) {
+            response.setParentId(task.getParent().getId());
+            String parentName = task.getParent().getName();
+            response.setParentName(parentName != null && !parentName.isBlank()
+                    ? parentName
+                    : taskRepository.findById(task.getParent().getId())
+                            .map(Task::getName)
+                            .orElse(null));
+        }
+        return response;
     }
 
     public TaskAnalyticsResponse getComprehensiveAnalytics(
@@ -198,6 +216,18 @@ public class AnalyticsService {
             Map<String, String> knownStatusTypes,
             Long effectiveSprintStart,
             List<Long> taskAssignees) {
+        return getComprehensiveAnalytics(task, events, knownStatusTypes, effectiveSprintStart, taskAssignees,
+                task.getTags() != null ? new ArrayList<>(task.getTags()) : Collections.emptyList(), null);
+    }
+
+    private TaskAnalyticsResponse getComprehensiveAnalytics(
+            Task task,
+            List<TaskEvent> events,
+            Map<String, String> knownStatusTypes,
+            Long effectiveSprintStart,
+            List<Long> taskAssignees,
+            List<String> taskTags,
+            Map<Long, User> assigneeUsers) {
         TaskAnalyticsResponse response = new TaskAnalyticsResponse();
         response.setTaskId(task.getId());
         response.setTaskName(task.getName());
@@ -224,45 +254,22 @@ public class AnalyticsService {
         String blockedById = task.getBlockedByTask() != null ? task.getBlockedByTask().getId() : null;
         response.setBlockedByTaskId(blockedById);
         response.setTimeEstimate(task.getTimeEstimate());
-        response.setTags(task.getTags() != null ? new ArrayList<>(task.getTags()) : Collections.emptyList());
-
-        if (task.getParent() != null) {
-            response.setParentId(task.getParent().getId());
-            String pName = task.getParent().getName();
-            if (pName == null || pName.isBlank()) {
-                pName = taskRepository.findById(task.getParent().getId())
-                        .map(Task::getName)
-                        .orElse(null);
-            }
-            response.setParentName(pName);
-        }
+        response.setTags(taskTags);
+        response.setAssigneeIds(taskAssignees != null ? taskAssignees : Collections.emptyList());
 
         if (taskAssignees != null && !taskAssignees.isEmpty()) {
             Long primaryId = taskAssignees.get(0);
             response.setAssigneeId(primaryId);
-            response.setAssigneeIds(taskAssignees);
-            userRepository.findById(primaryId).ifPresent(u -> {
-                response.setAssigneeName(u.getUsername());
-                response.setAssigneeProfilePicture(u.getProfilePicture());
-            });
-        }
-        try {
-            List<Task> childTasks = taskRepository.findByParentId(task.getId());
-            response.setSubtaskCount(childTasks.size());
-            if (!childTasks.isEmpty()) {
-                response.setSubtasks(childTasks.stream()
-                        .map(ct -> new TaskAnalyticsResponse.SubtaskItemDto(
-                                ct.getId(),
-                                ct.getName(),
-                                ct.getStatusName(),
-                                ct.getStatusType()))
-                        .toList());
-            } else {
-                response.setSubtasks(Collections.emptyList());
+            User assignee = assigneeUsers == null
+                    ? userRepository.findById(primaryId).orElse(null)
+                    : assigneeUsers.get(primaryId);
+            if (assignee != null) {
+                response.setAssigneeName(assignee.getUsername());
+                response.setAssigneeProfilePicture(assignee.getProfilePicture());
             }
-        } catch (Exception ignored) {
-            response.setSubtasks(Collections.emptyList());
         }
+        response.setSubtaskCount(0);
+        response.setSubtasks(Collections.emptyList());
 
         // Scope Creep Hesabı
         boolean scopeCreepDetected = false;
@@ -498,6 +505,14 @@ public class AnalyticsService {
                 }
             }
         }
+        Map<Long, User> assigneeUsersById = new HashMap<>();
+        if (!uniqueSprintAssignees.isEmpty()) {
+            userRepository.findAllById(uniqueSprintAssignees).forEach(user -> {
+                if (user.getId() != null) {
+                    assigneeUsersById.put(user.getId(), user);
+                }
+            });
+        }
 
         // 3. Statü Tiplerini Haritala
         Map<String, String> knownStatusTypes = new HashMap<>();
@@ -532,19 +547,13 @@ public class AnalyticsService {
         List<TaskAnalyticsResponse> taskResponses = new ArrayList<>();
         Map<String, Integer> taskCountPerColumn = new HashMap<>();
 
-        Map<String, Integer> subtaskCountsByTaskId = new HashMap<>();
+        Map<String, List<String>> tagsByTaskId = new HashMap<>();
         if (!taskIds.isEmpty()) {
-            try {
-                List<Object[]> subCounts = taskRepository.countSubtasksByParentIds(taskIds);
-                if (subCounts != null) {
-                    for (Object[] row : subCounts) {
-                        if (row.length >= 2 && row[0] != null && row[1] != null) {
-                            subtaskCountsByTaskId.put((String) row[0], ((Number) row[1]).intValue());
-                        }
-                    }
+            for (Object[] row : taskRepository.findTagsByTaskIdIn(taskIds)) {
+                if (row.length >= 2 && row[0] != null && row[1] != null) {
+                    tagsByTaskId.computeIfAbsent((String) row[0], ignored -> new ArrayList<>())
+                            .add((String) row[1]);
                 }
-            } catch (Exception e) {
-                log.warn("Subtask sayıları hesaplanırken hata oluştu: {}", e.getMessage());
             }
         }
 
@@ -564,18 +573,21 @@ public class AnalyticsService {
         }
 
         Map<String, List<TaskAnalyticsResponse.SubtaskItemDto>> subtasksByParentId = new HashMap<>();
+        Map<String, Integer> subtaskCountsByTaskId = new HashMap<>();
         if (!taskIds.isEmpty()) {
             try {
                 List<Task> allChildTasks = taskRepository.findByParentIdIn(taskIds);
                 if (allChildTasks != null) {
                     for (Task ct : allChildTasks) {
                         if (ct.getParent() != null && ct.getParent().getId() != null) {
-                            subtasksByParentId.computeIfAbsent(ct.getParent().getId(), k -> new ArrayList<>())
+                            String parentId = ct.getParent().getId();
+                            subtasksByParentId.computeIfAbsent(parentId, k -> new ArrayList<>())
                                     .add(new TaskAnalyticsResponse.SubtaskItemDto(
                                             ct.getId(),
                                             ct.getName(),
                                             ct.getStatusName(),
                                             ct.getStatusType()));
+                            subtaskCountsByTaskId.merge(parentId, 1, Integer::sum);
                         }
                     }
                 }
@@ -594,7 +606,8 @@ public class AnalyticsService {
             List<TaskEvent> taskEvents = eventsByTaskId.getOrDefault(task.getId(), Collections.emptyList());
 
             TaskAnalyticsResponse taskAnalytics = getComprehensiveAnalytics(task, taskEvents, knownStatusTypes,
-                    effectiveStart, taskAssignees);
+                    effectiveStart, taskAssignees, tagsByTaskId.getOrDefault(task.getId(), Collections.emptyList()),
+                    assigneeUsersById);
             taskAnalytics.setSubtaskCount(subtaskCountsByTaskId.getOrDefault(task.getId(), 0));
             taskAnalytics.setSubtasks(subtasksByParentId.getOrDefault(task.getId(), Collections.emptyList()));
             if (task.getParent() != null) {
@@ -731,23 +744,25 @@ public class AnalyticsService {
             }
         }
 
-        Map<Long, UserDto> usersMap = new HashMap<>();
-        if (!uniqueSprintAssignees.isEmpty()) {
-            List<User> sprintUsers = userRepository.findAllById(uniqueSprintAssignees);
-            if (sprintUsers != null) {
-                for (User u : sprintUsers) {
-                    if (u != null && u.getId() != null) {
-                        usersMap.put(u.getId(), new UserDto(
-                                u.getId(),
-                                u.getUsername(),
-                                u.getEmail(),
-                                u.getProfilePicture(),
-                                u.getRole() != null ? u.getRole() : "DEVELOPER",
-                                null,
-                                null));
-                    }
+        Set<Long> missingUserIds = new HashSet<>(uniqueSprintAssignees);
+        missingUserIds.removeAll(assigneeUsersById.keySet());
+        if (!missingUserIds.isEmpty()) {
+            userRepository.findAllById(missingUserIds).forEach(user -> {
+                if (user.getId() != null) {
+                    assigneeUsersById.put(user.getId(), user);
                 }
-            }
+            });
+        }
+        Map<Long, UserDto> usersMap = new HashMap<>();
+        for (User user : assigneeUsersById.values()) {
+            usersMap.put(user.getId(), new UserDto(
+                    user.getId(),
+                    user.getUsername(),
+                    user.getEmail(),
+                    user.getProfilePicture(),
+                    user.getRole() != null ? user.getRole() : "DEVELOPER",
+                    null,
+                    null));
         }
         sprintResponse.setUsersMap(usersMap);
         sprintResponse.setUserTaskCounts(userTaskCounts);

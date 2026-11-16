@@ -767,40 +767,56 @@ export default function DashboardPage() {
     return "to do";
   };
 
-  // Resolve the task assignee from available analytics.
-  const getTaskAssignee = (task: any) => {
-    let assigneeId: string | null = null;
+  // Resolve all task assignees, falling back to work-time analytics for older responses.
+  const getTaskAssignees = (task: any) => {
+    const hasAssigneeIds = Array.isArray(task.assigneeIds);
     let fallbackUsername: string | null = null;
     let fallbackPicture: string | null = null;
+    let assigneeIds: string[] = hasAssigneeIds
+      ? [...new Set(task.assigneeIds.filter((id: unknown) => id != null).map(String))]
+      : [];
 
-    if (task.assigneeId) {
-      assigneeId = String(task.assigneeId);
+    if (!hasAssigneeIds && task.assigneeName) {
       fallbackUsername = task.assigneeName || null;
       fallbackPicture = task.assigneeProfilePicture || task.assignee_profile_picture || null;
-    } else if (task.assigneeName) {
-      fallbackUsername = task.assigneeName;
-      fallbackPicture = task.assigneeProfilePicture || task.assignee_profile_picture || null;
-    } else if (task.userActiveWorkingTimes && Object.keys(task.userActiveWorkingTimes).length > 0) {
-      assigneeId = Object.keys(task.userActiveWorkingTimes)[0];
-    } else if (task.columnDetails) {
+    }
+
+    if (!hasAssigneeIds && task.assigneeId) {
+      assigneeIds = [String(task.assigneeId)];
+    }
+    if (!hasAssigneeIds && assigneeIds.length === 0 && task.userActiveWorkingTimes) {
+      assigneeIds = Object.keys(task.userActiveWorkingTimes);
+    }
+    if (!hasAssigneeIds && assigneeIds.length === 0 && task.columnDetails) {
       for (const col of Object.values(task.columnDetails) as any[]) {
         if (col.assigneeTimes && Object.keys(col.assigneeTimes).length > 0) {
-          assigneeId = Object.keys(col.assigneeTimes)[0];
-          break;
+          assigneeIds = [...new Set([...assigneeIds, ...Object.keys(col.assigneeTimes)])];
         }
       }
     }
 
-    if (!assigneeId && !fallbackUsername) return null;
+    if (assigneeIds.length === 0 && !fallbackUsername) return [];
+    if (assigneeIds.length === 0) {
+      return [{
+        id: '',
+        username: fallbackUsername || 'Assigned',
+        profile_picture: fallbackPicture,
+        email: '',
+      }];
+    }
 
-    const userObj = assigneeId ? sprintAnalytics?.usersMap?.[assigneeId] : null;
-    return {
-      id: assigneeId || '',
-      username: userObj?.username || fallbackUsername || (assigneeId ? `User (${assigneeId})` : 'Assigned'),
-      profile_picture: userObj?.profile_picture || userObj?.profilePicture || fallbackPicture || null,
-      email: userObj?.email || '',
-    };
+    return assigneeIds.map((assigneeId, index) => {
+      const userObj = sprintAnalytics?.usersMap?.[assigneeId];
+      return {
+        id: assigneeId,
+        username: userObj?.username || (index === 0 ? fallbackUsername : null) || `User (${assigneeId})`,
+        profile_picture: userObj?.profile_picture || userObj?.profilePicture || (index === 0 ? fallbackPicture : null) || null,
+        email: userObj?.email || '',
+      };
+    });
   };
+
+  const getTaskAssignee = (task: any) => getTaskAssignees(task)[0] || null;
 
   // Group tasks by their current status.
   const tasksByStatus = useMemo(() => {
@@ -1622,9 +1638,7 @@ export default function DashboardPage() {
                             </div>
                           ) : (
                             tasksInCol.map((task: any) => {
-                              const assigneeUser = getTaskAssignee(task);
-                              const userAvatar = assigneeUser?.profile_picture;
-                              const displayName = assigneeUser?.username;
+                              const assignees = getTaskAssignees(task);
 
                               return (
                                 <div
@@ -1687,12 +1701,17 @@ export default function DashboardPage() {
                                       {formatDuration(task.totalActiveWorkingTime)}
                                     </span>
 
-                                    {assigneeUser ? (
-                                      <UserAvatar
-                                        username={assigneeUser.username}
-                                        profilePicture={assigneeUser.profile_picture}
-                                        size={24}
-                                      />
+                                    {assignees.length > 0 ? (
+                                      <div className="flex items-center gap-1">
+                                        {assignees.map((assignee: any, index: number) => (
+                                          <UserAvatar
+                                            key={assignee.id || `${task.taskId}-assignee-${index}`}
+                                            username={assignee.username}
+                                            profilePicture={assignee.profile_picture}
+                                            size={24}
+                                          />
+                                        ))}
+                                      </div>
                                     ) : (
                                       <div
                                         className="w-6 h-6 rounded-full bg-gray-800/80 border border-gray-700/60 flex items-center justify-center shrink-0"
@@ -1924,14 +1943,24 @@ export default function DashboardPage() {
 
               {/* Assignee */}
               {(() => {
-                const assignee = getTaskAssignee(selectedTask);
-                return assignee ? (
+                const assignees = getTaskAssignees(selectedTask);
+                return assignees.length > 0 ? (
                   <div className="bg-[#0d1117] p-3 rounded-xl border border-gray-800 flex items-center gap-3">
-                    <UserAvatar username={assignee.username} profilePicture={assignee.profile_picture} size={36} />
                     <div className="min-w-0">
-                      <span className="text-[10px] text-gray-400 block font-medium uppercase tracking-wider">Assignee</span>
-                      <span className="text-xs font-semibold text-white truncate block">{assignee.username}</span>
-                      {assignee.email && <span className="text-[10px] text-gray-500 truncate block">{assignee.email}</span>}
+                      <span className="text-[10px] text-gray-400 block font-medium uppercase tracking-wider">
+                        Assignees ({assignees.length})
+                      </span>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {assignees.map((assignee: any, index: number) => (
+                          <div key={assignee.id || `selected-assignee-${index}`} className="flex items-center gap-2 rounded-md bg-gray-800/60 px-2 py-1">
+                            <UserAvatar username={assignee.username} profilePicture={assignee.profile_picture} size={28} />
+                            <div className="min-w-0">
+                              <span className="text-xs font-semibold text-white truncate block">{assignee.username}</span>
+                              {assignee.email && <span className="text-[10px] text-gray-500 truncate block">{assignee.email}</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -2133,4 +2162,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
