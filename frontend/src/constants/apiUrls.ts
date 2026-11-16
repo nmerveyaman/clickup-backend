@@ -1,4 +1,11 @@
-export const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '');
+
+// Eğer Render'dan gelen adres başında http/https yoksa 'https://' ekler (örn: clickup-analytics-backend-fm11.onrender.com)
+export const BASE_URL = rawBaseUrl
+  ? (rawBaseUrl.startsWith('http://') || rawBaseUrl.startsWith('https://')
+      ? rawBaseUrl
+      : `https://${rawBaseUrl}`)
+  : '';
 
 export const API_URLS = {
   // Auth
@@ -24,4 +31,3 @@ export const API_URLS = {
     STREAM: (workspaceId: string) => `${BASE_URL}/api/events/stream?workspaceId=${encodeURIComponent(workspaceId)}`,
   },
 };
-
