@@ -773,11 +773,16 @@ export default function DashboardPage() {
   // Resolve all task assignees, falling back to work-time analytics for older responses.
   const getTaskAssignees = (task: any) => {
     const hasAssigneeIds = Array.isArray(task.assigneeIds);
+    const rawAssigneeIds: unknown[] = hasAssigneeIds ? task.assigneeIds : [];
     let fallbackUsername: string | null = null;
     let fallbackPicture: string | null = null;
-    let assigneeIds: string[] = hasAssigneeIds
-      ? [...new Set(task.assigneeIds.filter((id: unknown) => id != null).map(String))]
-      : [];
+    const uniqueAssigneeIds = new Set<string>();
+    for (const id of rawAssigneeIds) {
+      if (typeof id === 'string' || typeof id === 'number') {
+        uniqueAssigneeIds.add(String(id));
+      }
+    }
+    let assigneeIds: string[] = Array.from(uniqueAssigneeIds);
 
     if (!hasAssigneeIds && task.assigneeName) {
       fallbackUsername = task.assigneeName || null;
