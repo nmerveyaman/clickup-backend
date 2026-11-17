@@ -52,6 +52,7 @@ const MAX_SAVED_NOTIFICATIONS = 100;
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const [isSprintListExpanded, setIsSprintListExpanded] = useState(false);
   const [sprintList, setSprintList] = useState<any[]>([]);
   const [selectedSprintId, setSelectedSprintId] = useState<string | null>(null);
   const [availableWorkspaces, setAvailableWorkspaces] = useState<{ id: string; name: string }[]>([]);
@@ -988,28 +989,41 @@ export default function DashboardPage() {
             )}
           </div>
 
-          <div className="p-4 flex items-center gap-3 border-b border-gray-800">
-            <Layers className="w-6 h-6 text-indigo-400 shrink-0" />
-            {isSidebarHovered && <span className="font-bold text-lg text-white whitespace-nowrap">Sprints</span>}
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsSprintListExpanded((expanded) => !expanded)}
+            aria-expanded={isSprintListExpanded}
+            title="Toggle sprint lists"
+            className="flex w-full items-center gap-3 border-b border-gray-800 p-4 text-left transition-colors hover:bg-gray-800/40"
+          >
+            <Layers className="h-6 w-6 shrink-0 text-indigo-400" />
+            {isSidebarHovered && (
+              <>
+                <span className="flex-1 whitespace-nowrap text-lg font-bold text-white">Sprints</span>
+                {isSprintListExpanded
+                  ? <ChevronUp className="h-4 w-4 text-gray-500" />
+                  : <ChevronDown className="h-4 w-4 text-gray-500" />}
+              </>
+            )}
+          </button>
 
           <div className="border-b border-gray-800 p-2">
             <button
               type="button"
-              onClick={() => navigate('/workspace-users')}
-              title="Workspace kullanıcıları"
+              onClick={() => navigate('/workspace-members')}
+              title="Workspace members"
               className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-gray-400 transition-colors hover:bg-indigo-600/20 hover:text-indigo-300"
             >
               <Users className="h-5 w-5 shrink-0 text-indigo-400" />
               {isSidebarHovered && (
-                <span className="truncate text-sm font-medium">Kullanıcılar</span>
+                <span className="truncate text-sm font-medium">Workspace Members</span>
               )}
             </button>
           </div>
 
           {/* Sprint Listesi */}
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {sprintList.map((sprint: any) => (
+            {isSprintListExpanded && sprintList.map((sprint: any) => (
               <button
                 key={sprint.id}
                 onClick={() => fetchSprintAnalytics(sprint.id)}
@@ -1128,11 +1142,11 @@ export default function DashboardPage() {
             </div>
             <button
               type="button"
-              onClick={() => navigate('/workspace-users')}
+              onClick={() => navigate('/workspace-members')}
               className="flex items-center gap-2 rounded-xl border border-gray-800 bg-[#161b22] px-3 py-2 text-xs font-medium text-gray-300 transition hover:border-indigo-500/50 hover:text-white"
             >
               <Users className="h-4 w-4 text-indigo-400" />
-              Kullanıcılar
+              Workspace Members
             </button>
             <div className="relative">
               <button

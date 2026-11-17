@@ -55,7 +55,7 @@ export default function WorkspaceMembersPage() {
   const loadMembers = useCallback(async (signal: AbortSignal) => {
     if (!workspaceId) {
       setMembers([]);
-      setError('Workspace seçilmemiş. Dashboard üzerinden bir workspace seçin.');
+      setError('No workspace selected. Select a workspace from the dashboard.');
       setLoading(false);
       return;
     }
@@ -72,13 +72,13 @@ export default function WorkspaceMembersPage() {
         signal,
       });
       if (!response.ok) {
-        throw new Error(`Üye bilgileri alınamadı (${response.status}).`);
+        throw new Error(`Failed to load workspace members (${response.status}).`);
       }
       setMembers(await response.json() as Member[]);
     } catch (fetchError) {
       if (fetchError instanceof DOMException && fetchError.name === 'AbortError') return;
-      console.error('Workspace kullanıcı analitiği yüklenemedi:', fetchError);
-      setError(fetchError instanceof Error ? fetchError.message : 'Üye bilgileri yüklenemedi.');
+      console.error('Failed to load workspace member analytics:', fetchError);
+      setError(fetchError instanceof Error ? fetchError.message : 'Failed to load workspace members.');
     } finally {
       if (!signal.aborted) setLoading(false);
     }
@@ -105,9 +105,9 @@ export default function WorkspaceMembersPage() {
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold text-white">
               <Users className="h-6 w-6 text-indigo-400" />
-              Workspace kullanıcıları
+              Workspace Members
             </h1>
-            <p className="mt-1 text-xs text-gray-400">Üyeler, atanmış görevler ve görev durumlarına göre süreler</p>
+              <p className="mt-1 text-xs text-gray-400">Workspace members, assigned tasks, statuses, and time analytics</p>
           </div>
         </div>
         <button
@@ -117,23 +117,23 @@ export default function WorkspaceMembersPage() {
           className="flex items-center gap-2 rounded-xl border border-gray-800 bg-[#161b22] p-2.5 text-xs text-gray-300 transition hover:border-gray-700 hover:text-white disabled:opacity-50"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Yenile
+          Refresh
         </button>
       </header>
 
       {loading ? (
-        <div className="py-24 text-center text-sm text-gray-400">Kullanıcılar ve görev analizleri yükleniyor...</div>
+        <div className="py-24 text-center text-sm text-gray-400">Loading workspace members and task analytics...</div>
       ) : error ? (
         <div role="alert" className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-6 text-center text-sm text-rose-300">
           {error}
         </div>
       ) : members.length === 0 ? (
-        <div className="py-24 text-center text-sm text-gray-500">Bu workspace için kullanıcı bulunamadı.</div>
+        <div className="py-24 text-center text-sm text-gray-500">No members found in this workspace.</div>
       ) : (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {members.map((member) => {
             const expanded = expandedMemberId === member.id;
-            const username = member.username || `Kullanıcı ${member.id}`;
+            const username = member.username || `Member ${member.id}`;
             return (
               <section key={member.id} className="overflow-hidden rounded-2xl border border-gray-800/80 bg-[#161b22]">
                 <button
@@ -157,7 +157,7 @@ export default function WorkspaceMembersPage() {
                     <span className="block truncate text-sm font-semibold text-white">{username}</span>
                     <span className="mt-1 flex items-center gap-1.5 truncate text-xs text-gray-400">
                       <Mail className="h-3.5 w-3.5 shrink-0 text-gray-500" />
-                      {member.email || 'E-posta yok'}
+                      {member.email || 'No email'}
                     </span>
                     <span className="mt-2 flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center gap-1 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2.5 py-0.5 text-[10px] font-medium text-indigo-300">
@@ -166,7 +166,7 @@ export default function WorkspaceMembersPage() {
                       </span>
                       <span className="inline-flex items-center gap-1 text-[11px] text-gray-400">
                         <ListTodo className="h-3.5 w-3.5" />
-                        {member.tasks.length} atanmış görev
+                        {member.tasks.length} assigned tasks
                       </span>
                     </span>
                   </span>
@@ -178,7 +178,7 @@ export default function WorkspaceMembersPage() {
                 {expanded && (
                   <div className="border-t border-gray-800/80 p-4">
                     {member.tasks.length === 0 ? (
-                      <p className="py-5 text-center text-xs text-gray-500">Bu kullanıcıya atanmış görev yok.</p>
+                      <p className="py-5 text-center text-xs text-gray-500">No tasks assigned to this member.</p>
                     ) : (
                       <div className="space-y-2">
                         {member.tasks.map((task) => (
@@ -186,7 +186,7 @@ export default function WorkspaceMembersPage() {
                             <div className="flex flex-wrap items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <h2 className="truncate text-xs font-semibold text-gray-100">{task.taskName || task.taskId}</h2>
-                                <p className="mt-1 text-[11px] text-gray-500">Durum: <span className="text-gray-300">{task.status || 'Bilinmiyor'}</span></p>
+                                <p className="mt-1 text-[11px] text-gray-500">Status: <span className="text-gray-300">{task.status || 'Unknown'}</span></p>
                               </div>
                               <div className="flex flex-wrap gap-2 text-[10px]">
                                 {task.stalled && (
@@ -196,28 +196,28 @@ export default function WorkspaceMembersPage() {
                                 )}
                                 {task.rollbackCount > 0 && (
                                   <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-amber-300">
-                                    <RotateCcw className="h-3 w-3" /> {task.rollbackCount} rollback
+                                    <RotateCcw className="h-3 w-3" /> {task.rollbackCount} rollback{task.rollbackCount === 1 ? '' : 's'}
                                   </span>
                                 )}
                               </div>
                             </div>
                             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                              <div className="rounded-lg bg-gray-800/40 px-2.5 py-2" title="Bu kullanıcıya ait süre, görev geçmişindeki aktif statü kolonlarından hesaplanır; ClickUp time-tracking kaydı değildir.">
-                                <span className="flex items-center gap-1 text-[10px] text-gray-500"><Activity className="h-3 w-3" /> Aktif süre (kişi)</span>
+                              <div className="rounded-lg bg-gray-800/40 px-2.5 py-2" title="Member time is estimated from active statuses in task history; it is not ClickUp time tracking data.">
+                                <span className="flex items-center gap-1 text-[10px] text-gray-500"><Activity className="h-3 w-3" /> Member active time</span>
                                 <span className="mt-1 block text-[11px] font-medium text-emerald-300">{task.activeWorkingTime || '—'}</span>
                               </div>
                               <div className="rounded-lg bg-gray-800/40 px-2.5 py-2">
-                                <span className="flex items-center gap-1 text-[10px] text-gray-500"><Clock className="h-3 w-3" /> Bekleme</span>
+                                <span className="flex items-center gap-1 text-[10px] text-gray-500"><Clock className="h-3 w-3" /> Waiting time</span>
                                 <span className="mt-1 block text-[11px] font-medium text-amber-200">{task.waitingTime || '—'}</span>
                               </div>
                               <div className="rounded-lg bg-gray-800/40 px-2.5 py-2">
-                                <span className="flex items-center gap-1 text-[10px] text-gray-500"><Clock className="h-3 w-3" /> Toplam süre</span>
+                                <span className="flex items-center gap-1 text-[10px] text-gray-500"><Clock className="h-3 w-3" /> Total duration</span>
                                 <span className="mt-1 block text-[11px] font-medium text-gray-300">{task.totalDuration || '—'}</span>
                               </div>
                             </div>
                             <div className="mt-2 rounded-lg border border-gray-800 bg-gray-800/20 px-2.5 py-2">
                               <div className="flex flex-wrap items-center justify-between gap-2">
-                                <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Görev aktif süresi / tahmin</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Task active time vs. estimate</span>
                                 {task.estimatedTime ? (
                                   <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
                                     task.estimateOutcome === 'OVER_ESTIMATE' || task.estimateOutcome === 'OVER_ESTIMATE_COMPLETED'
@@ -226,30 +226,30 @@ export default function WorkspaceMembersPage() {
                                         ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
                                         : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
                                   }`}>
-                                    {task.estimateOutcome === 'OVER_ESTIMATE' ? 'Tahmin aşıldı'
-                                      : task.estimateOutcome === 'OVER_ESTIMATE_COMPLETED' ? 'Tahmin aşımıyla tamamlandı'
-                                        : task.estimateOutcome === 'MET_ESTIMATE' ? 'Tahmin dahilinde tamamlandı'
-                                          : task.estimateOutcome === 'UNAVAILABLE' ? 'Karşılaştırılamadı'
-                                            : 'Tahmin içinde'}
+                                    {task.estimateOutcome === 'OVER_ESTIMATE' ? 'Estimate exceeded'
+                                      : task.estimateOutcome === 'OVER_ESTIMATE_COMPLETED' ? 'Completed over estimate'
+                                        : task.estimateOutcome === 'MET_ESTIMATE' ? 'Completed within estimate'
+                                          : task.estimateOutcome === 'UNAVAILABLE' ? 'Comparison unavailable'
+                                            : 'Within estimate'}
                                   </span>
                                 ) : task.estimateOutcome === 'UNAVAILABLE' ? (
-                                  <span className="text-[10px] text-amber-300">Tahmin değeri okunamadı</span>
+                                  <span className="text-[10px] text-amber-300">Estimate value could not be read</span>
                                 ) : (
-                                  <span className="text-[10px] text-gray-500">Tahmin girilmemiş</span>
+                                  <span className="text-[10px] text-gray-500">No estimate set</span>
                                 )}
                               </div>
                               {task.estimatedTime && (
                                 <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-400">
-                                  <span>Gerçekleşen: <strong className="text-gray-200">{task.taskActiveWorkingTime || (task.estimateOutcome === 'UNAVAILABLE' ? '—' : '0 Saniye')}</strong></span>
-                                  <span>Tahmin: <strong className="text-gray-200">{task.estimatedTime}</strong></span>
+                                  <span>Actual: <strong className="text-gray-200">{task.taskActiveWorkingTime || (task.estimateOutcome === 'UNAVAILABLE' ? '—' : '0 seconds')}</strong></span>
+                                  <span>Estimate: <strong className="text-gray-200">{task.estimatedTime}</strong></span>
                                   {task.estimateUsagePercentage != null && (
-                                    <span>Kullanım: <strong className="text-gray-200">{task.estimateUsagePercentage}%</strong></span>
+                                    <span>Used: <strong className="text-gray-200">{task.estimateUsagePercentage}%</strong></span>
                                   )}
                                   {task.estimateVariance && (
-                                    <span>{task.estimateOutcome === 'OVER_ESTIMATE' || task.estimateOutcome === 'OVER_ESTIMATE_COMPLETED' ? 'Aşım' : task.estimateOutcome === 'MET_ESTIMATE' ? 'Tahmin altı' : 'Kalan'}: <strong className="text-gray-200">{task.estimateVariance}</strong></span>
+                                    <span>{task.estimateOutcome === 'OVER_ESTIMATE' || task.estimateOutcome === 'OVER_ESTIMATE_COMPLETED' ? 'Over by' : task.estimateOutcome === 'MET_ESTIMATE' ? 'Under by' : 'Remaining'}: <strong className="text-gray-200">{task.estimateVariance}</strong></span>
                                   )}
                                   {task.estimateOutcome === 'UNAVAILABLE' && (
-                                    <span className="text-amber-300">Tahmin değeri okunamadı</span>
+                                    <span className="text-amber-300">Estimate value could not be read</span>
                                   )}
                                 </div>
                               )}
