@@ -988,6 +988,20 @@ export default function DashboardPage() {
             {isSidebarHovered && <span className="font-bold text-lg text-white whitespace-nowrap">Sprints</span>}
           </div>
 
+          <div className="border-b border-gray-800 p-2">
+            <button
+              type="button"
+              onClick={() => navigate('/workspace-users')}
+              title="Workspace kullanıcıları"
+              className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-gray-400 transition-colors hover:bg-indigo-600/20 hover:text-indigo-300"
+            >
+              <Users className="h-5 w-5 shrink-0 text-indigo-400" />
+              {isSidebarHovered && (
+                <span className="truncate text-sm font-medium">Kullanıcılar</span>
+              )}
+            </button>
+          </div>
+
           {/* Sprint Listesi */}
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {sprintList.map((sprint: any) => (
