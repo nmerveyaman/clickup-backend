@@ -60,6 +60,14 @@ function App() {
           }
         />
         <Route
+          path="/workspace-users"
+          element={
+            <ProtectedRoute>
+              <WorkspaceMembersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
@@ -83,4 +91,3 @@ function App() {
 }
 
 export default App;
-

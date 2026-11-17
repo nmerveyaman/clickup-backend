@@ -75,6 +75,9 @@ export default function DashboardPage() {
   const notificationStorageKey = `clickup-notifications:${workspaceId || 'unknown'}`;
   const selectedSprintIdRef = useRef(selectedSprintId);
   selectedSprintIdRef.current = selectedSprintId;
+  useEffect(() => {
+    setSelectedAssigneeFilter(null);
+  }, [selectedSprintId]);
   const [notifications, setNotifications] = useState<TaskNotification[]>(() => {
     try {
       const saved = localStorage.getItem(notificationStorageKey);
@@ -1104,6 +1107,14 @@ export default function DashboardPage() {
                 {formatDuration(sprintAnalytics?.totalSprintActiveWorkingTime)}
               </span>
             </div>
+            <button
+              type="button"
+              onClick={() => navigate('/workspace-users')}
+              className="flex items-center gap-2 rounded-xl border border-gray-800 bg-[#161b22] px-3 py-2 text-xs font-medium text-gray-300 transition hover:border-indigo-500/50 hover:text-white"
+            >
+              <Users className="h-4 w-4 text-indigo-400" />
+              Kullanıcılar
+            </button>
             <div className="relative">
               <button
                 type="button"

@@ -3,19 +3,32 @@ package org.example.controller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.entity.Lists;
+import org.example.entity.Task;
+import org.example.entity.TaskAssignee;
+import org.example.entity.TaskEvent;
 import org.example.entity.User;
 import org.example.entity.UserTokens;
 import org.example.entity.WorkspaceMember;
 import org.example.repository.ListRepository;
+import org.example.repository.TaskAssigneeRepository;
+import org.example.repository.TaskEventRepository;
+import org.example.repository.TaskRepository;
 import org.example.repository.UserTokensRepository;
 import org.example.repository.WorkspaceMemberRepository;
+import org.example.dto.TaskAnalyticsResponse;
+import org.example.dto.WorkspaceMemberAnalyticsDto;
+import org.example.services.AnalyticsService;
 import org.example.services.ClickUpFullSyncService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -25,6 +38,10 @@ public class WorkspaceController {
 
     private final WorkspaceMemberRepository workspaceMemberRepository;
     private final ListRepository listRepository;
+    private final TaskRepository taskRepository;
+    private final TaskAssigneeRepository taskAssigneeRepository;
+    private final TaskEventRepository taskEventRepository;
+    private final AnalyticsService analyticsService;
     private final UserTokensRepository userTokensRepository;
     private final ClickUpFullSyncService clickUpFullSyncService;
 
@@ -106,6 +123,93 @@ public class WorkspaceController {
                 })
                 .toList();
 
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/{workspaceId}/members/analytics")
+    @Transactional(readOnly = true)
+    public ResponseEntity<List<WorkspaceMemberAnalyticsDto>> getWorkspaceMemberAnalytics(
+            @PathVariable String workspaceId) {
+        String cleanWorkspaceId = workspaceId.trim();
+        List<WorkspaceMember> members = workspaceMemberRepository.findByWorkspaceId(cleanWorkspaceId);
+        List<Task> tasks = taskRepository.findByWorkspaceId(cleanWorkspaceId);
+        List<String> taskIds = tasks.stream().map(Task::getId).filter(java.util.Objects::nonNull).toList();
+
+        Map<String, List<TaskEvent>> eventsByTaskId = taskIds.isEmpty()
+                ? Collections.emptyMap()
+                : taskEventRepository.findByTaskIdIn(taskIds).stream()
+                        .filter(event -> event.getTask() != null)
+                        .collect(Collectors.groupingBy(event -> event.getTask().getId()));
+        Map<String, List<Long>> assigneeIdsByTaskId = new HashMap<>();
+        if (!taskIds.isEmpty()) {
+            for (TaskAssignee assignment : taskAssigneeRepository.findByTaskIdIn(taskIds)) {
+                if (assignment.getTask() != null && assignment.getUser() != null) {
+                    assigneeIdsByTaskId.computeIfAbsent(assignment.getTask().getId(), ignored -> new java.util.ArrayList<>())
+                            .add(assignment.getUser().getId());
+                }
+            }
+        }
+
+        Map<Long, List<WorkspaceMemberAnalyticsDto.AssignedTaskDto>> tasksByUserId = new HashMap<>();
+        for (Task task : tasks) {
+            List<Long> assigneeIds = assigneeIdsByTaskId.getOrDefault(task.getId(), Collections.emptyList())
+                    .stream()
+                    .distinct()
+                    .toList();
+            if (assigneeIds.isEmpty()) {
+                continue;
+            }
+
+            TaskAnalyticsResponse analytics = analyticsService.getAssignedTaskAnalytics(
+                    task,
+                    eventsByTaskId.getOrDefault(task.getId(), Collections.emptyList()),
+                    assigneeIds);
+            AnalyticsService.EstimateComparison estimateComparison = analyticsService.compareTimeEstimate(
+                    task.getTimeEstimate(),
+                    analytics.getTotalTaskDuration() == null ? -1L : analytics.getTotalActiveWorkingTimeMillis(),
+                    analytics.getEndDate() != null);
+            for (Long assigneeId : assigneeIds) {
+                Map<Long, String> activeTimes = analytics.getUserActiveWorkingTimes();
+                Map<Long, String> waitingTimes = analytics.getUserWaitingTimes();
+                WorkspaceMemberAnalyticsDto.AssignedTaskDto taskDto =
+                        new WorkspaceMemberAnalyticsDto.AssignedTaskDto(
+                                task.getId(),
+                                task.getName(),
+                                analytics.getCurrentStatus(),
+                                activeTimes == null ? null : activeTimes.get(assigneeId),
+                                analytics.getTotalActiveWorkingTime(),
+                                waitingTimes == null ? null : waitingTimes.get(assigneeId),
+                                analytics.getTotalTaskDuration(),
+                                estimateComparison == null ? null : estimateComparison.estimatedTime(),
+                                estimateComparison == null ? null : estimateComparison.usagePercentage(),
+                                estimateComparison == null ? null : estimateComparison.variance(),
+                                estimateComparison == null ? null : estimateComparison.outcome(),
+                                analytics.isStalled(),
+                                analytics.getRollbackCount());
+                tasksByUserId.computeIfAbsent(assigneeId, ignored -> new java.util.ArrayList<>()).add(taskDto);
+            }
+        }
+
+        Map<Long, User> uniqueMembers = new LinkedHashMap<>();
+        for (WorkspaceMember member : members) {
+            if (member.getUser() != null && member.getUser().getId() != null) {
+                uniqueMembers.putIfAbsent(member.getUser().getId(), member.getUser());
+            }
+        }
+
+        List<WorkspaceMemberAnalyticsDto> result = uniqueMembers.values().stream()
+                .map(user -> new WorkspaceMemberAnalyticsDto(
+                        user.getId(),
+                        user.getUsername(),
+                        user.getEmail(),
+                        user.getProfilePicture(),
+                        user.getRole() != null ? user.getRole() : "DEVELOPER",
+                        tasksByUserId.getOrDefault(user.getId(), Collections.emptyList()).stream()
+                                .sorted(java.util.Comparator.comparing(
+                                        WorkspaceMemberAnalyticsDto.AssignedTaskDto::taskName,
+                                        java.util.Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+                                .toList()))
+                .toList();
         return ResponseEntity.ok(result);
     }
 

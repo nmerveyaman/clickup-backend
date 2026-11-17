@@ -31,10 +31,7 @@ public class AnalyticsService {
     private final TaskEventRepository taskEventRepository;
     private final TaskAssigneeRepository taskAssigneeRepository;
 
-    /**
-     * Sprint / Listenin resmi (Lists.startDate) veya akıllı fallback (Native SQL)
-     * başlangıç tarihini hesaplar.
-     */
+    /** Uses the configured list start date, falling back to the earliest task creation date. */
     public long resolveEffectiveSprintStartDate(Lists listEntity) {
         if (listEntity == null) {
             return -1L;
@@ -119,10 +116,31 @@ public class AnalyticsService {
         return null;
     }
 
-    private boolean isRollbackEvent(TaskEvent event) {
-        if (event == null || event.getEventType() == null)
-            return false;
-        return event.getEventType().toUpperCase().contains("ROLLBACK");
+    private int countStatusRollbacks(List<TaskEvent> events, Map<String, Integer> statusOrderIndices) {
+        int rollbackCount = 0;
+
+        List<TaskEvent> statusEvents = events.stream()
+                .filter(Objects::nonNull)
+                .filter(event -> extractFromStatus(event) != null && extractToStatus(event) != null)
+                .filter(event -> event.getTimestamp() != null && parseTimestamp(event.getTimestamp()) > 0L)
+                .sorted(Comparator.comparingLong(event -> parseTimestamp(event.getTimestamp())))
+                .toList();
+
+        for (TaskEvent event : statusEvents) {
+            String fromStatus = extractFromStatus(event).trim();
+            String toStatus = extractToStatus(event).trim();
+            if (sameStatus(fromStatus, toStatus)) {
+                continue;
+            }
+
+            Integer fromOrder = statusOrderIndices.get(fromStatus.toLowerCase(Locale.ROOT));
+            Integer toOrder = statusOrderIndices.get(toStatus.toLowerCase(Locale.ROOT));
+            if (fromOrder != null && toOrder != null && toOrder < fromOrder) {
+                rollbackCount++;
+            }
+        }
+
+        return rollbackCount;
     }
 
     private static class StatusSegment {
@@ -164,12 +182,17 @@ public class AnalyticsService {
             List<TaskEvent> events,
             Lists listEntity) {
         Map<String, String> knownStatusTypes = new HashMap<>();
+        Map<String, Integer> statusOrderIndices = new HashMap<>();
         if (listEntity != null && listEntity.getStatuses() != null) {
             for (StatusDto status : listEntity.getStatuses()) {
-                if (status.status() != null && status.type() != null) {
-                    knownStatusTypes.put(
-                            status.status().toLowerCase(Locale.ROOT).trim(),
-                            status.type().toLowerCase(Locale.ROOT));
+                if (status.status() != null) {
+                    String normalizedStatus = status.status().toLowerCase(Locale.ROOT).trim();
+                    if (status.type() != null) {
+                        knownStatusTypes.put(normalizedStatus, status.type().toLowerCase(Locale.ROOT));
+                    }
+                    if (status.orderIndex() != null) {
+                        statusOrderIndices.put(normalizedStatus, status.orderIndex());
+                    }
                 }
             }
         }
@@ -190,7 +213,9 @@ public class AnalyticsService {
                 .toList();
 
         TaskAnalyticsResponse response =
-                getComprehensiveAnalytics(task, events, knownStatusTypes, effectiveSprintStart, assignees);
+                getComprehensiveAnalytics(task, events, knownStatusTypes, statusOrderIndices,
+                        effectiveSprintStart, assignees,
+                        task.getTags() != null ? new ArrayList<>(task.getTags()) : Collections.emptyList(), null);
         List<Task> childTasks = taskRepository.findByParentId(task.getId());
         response.setSubtaskCount(childTasks.size());
         response.setSubtasks(childTasks.stream()
@@ -210,13 +235,103 @@ public class AnalyticsService {
         return response;
     }
 
+    public TaskAnalyticsResponse getAssignedTaskAnalytics(
+            Task task,
+            List<TaskEvent> events,
+            List<Long> taskAssignees) {
+        Map<String, String> knownStatusTypes = new HashMap<>();
+        Map<String, Integer> statusOrderIndices = new HashMap<>();
+        Lists listEntity = task.getList();
+        if (listEntity != null && listEntity.getStatuses() != null) {
+            for (StatusDto status : listEntity.getStatuses()) {
+                if (status.status() == null) {
+                    continue;
+                }
+                String normalizedStatus = status.status().toLowerCase(Locale.ROOT).trim();
+                if (status.type() != null) {
+                    knownStatusTypes.put(normalizedStatus, status.type().toLowerCase(Locale.ROOT));
+                }
+                if (status.orderIndex() != null) {
+                    statusOrderIndices.put(normalizedStatus, status.orderIndex());
+                }
+            }
+        }
+        if (task.getStatusName() != null && task.getStatusType() != null) {
+            knownStatusTypes.put(
+                    task.getStatusName().toLowerCase(Locale.ROOT).trim(),
+                    task.getStatusType().toLowerCase(Locale.ROOT));
+        }
+
+        List<String> taskTags = task.getTags() == null
+                ? Collections.emptyList()
+                : new ArrayList<>(task.getTags());
+        return getComprehensiveAnalytics(
+                task,
+                events,
+                knownStatusTypes,
+                statusOrderIndices,
+                null,
+                taskAssignees,
+                taskTags,
+                Collections.emptyMap());
+    }
+
+    public EstimateComparison compareTimeEstimate(String rawEstimate, long actualActiveMillis, boolean completed) {
+        if (rawEstimate == null || rawEstimate.isBlank()) {
+            return null;
+        }
+
+        final long estimateMillis;
+        try {
+            estimateMillis = Long.parseLong(rawEstimate.trim());
+        } catch (NumberFormatException e) {
+            return new EstimateComparison(null, null, null, "UNAVAILABLE");
+        }
+        if (estimateMillis <= 0L) {
+            return null;
+        }
+        if (actualActiveMillis < 0L) {
+            return new EstimateComparison(formatDuration(estimateMillis), null, null, "UNAVAILABLE");
+        }
+
+        long differenceMillis = Math.abs(actualActiveMillis - estimateMillis);
+        boolean overEstimate = actualActiveMillis > estimateMillis;
+        double usagePercentage = Math.round((double) actualActiveMillis / estimateMillis * 1000.0) / 10.0;
+        String outcome = overEstimate
+                ? (completed ? "OVER_ESTIMATE_COMPLETED" : "OVER_ESTIMATE")
+                : (completed ? "MET_ESTIMATE" : "WITHIN_ESTIMATE");
+        return new EstimateComparison(
+                formatDuration(estimateMillis),
+                usagePercentage,
+                formatDuration(differenceMillis),
+                outcome);
+    }
+
+    public record EstimateComparison(
+            String estimatedTime,
+            Double usagePercentage,
+            String variance,
+            String outcome) {}
+
     public TaskAnalyticsResponse getComprehensiveAnalytics(
             Task task,
             List<TaskEvent> events,
             Map<String, String> knownStatusTypes,
             Long effectiveSprintStart,
             List<Long> taskAssignees) {
-        return getComprehensiveAnalytics(task, events, knownStatusTypes, effectiveSprintStart, taskAssignees,
+        Map<String, Integer> statusOrderIndices = new HashMap<>();
+        Lists listEntity = task.getList();
+        if (listEntity != null && listEntity.getStatuses() != null) {
+            for (StatusDto status : listEntity.getStatuses()) {
+                if (status.status() != null && status.orderIndex() != null) {
+                    statusOrderIndices.put(
+                            status.status().toLowerCase(Locale.ROOT).trim(),
+                            status.orderIndex());
+                }
+            }
+        }
+        return getComprehensiveAnalytics(task, events, knownStatusTypes, statusOrderIndices,
+                effectiveSprintStart, taskAssignees,
                 task.getTags() != null ? new ArrayList<>(task.getTags()) : Collections.emptyList(), null);
     }
 
@@ -224,6 +339,7 @@ public class AnalyticsService {
             Task task,
             List<TaskEvent> events,
             Map<String, String> knownStatusTypes,
+            Map<String, Integer> statusOrderIndices,
             Long effectiveSprintStart,
             List<Long> taskAssignees,
             List<String> taskTags,
@@ -245,11 +361,7 @@ public class AnalyticsService {
                 : null;
         response.setEndDate(realEndDate);
 
-        int rollbackCount = (int) safeEvents.stream()
-                .filter(Objects::nonNull)
-                .filter(this::isRollbackEvent)
-                .count();
-        response.setRollbackCount(rollbackCount);
+        response.setRollbackCount(countStatusRollbacks(safeEvents, statusOrderIndices));
 
         String blockedById = task.getBlockedByTask() != null ? task.getBlockedByTask().getId() : null;
         response.setBlockedByTaskId(blockedById);
@@ -271,14 +383,12 @@ public class AnalyticsService {
         response.setSubtaskCount(0);
         response.setSubtasks(Collections.emptyList());
 
-        // Scope Creep Hesabı
-        boolean scopeCreepDetected = false;
-        if (task.getDateCreated() != null && effectiveSprintStart != null && effectiveSprintStart != -1L) {
-            long taskCreatedMillis = parseTimestamp(task.getDateCreated());
-            if (taskCreatedMillis > effectiveSprintStart) {
-                scopeCreepDetected = true;
-            }
-        }
+        long taskCreatedMillisForScope = parseTimestamp(task.getDateCreated());
+        long scopeCreepGracePeriodMillis = 24L * 60L * 60L * 1000L;
+        boolean scopeCreepDetected = taskCreatedMillisForScope > 0L
+                && effectiveSprintStart != null
+                && effectiveSprintStart > 0L
+                && taskCreatedMillisForScope - effectiveSprintStart >= scopeCreepGracePeriodMillis;
         response.setScopeCreep(scopeCreepDetected);
 
         long taskCreatedMillis = parseTimestamp(task.getDateCreated());
@@ -439,6 +549,7 @@ public class AnalyticsService {
         response.setUserWaitingTimes(formattedUserWaitingTimes);
 
         response.setTotalActiveWorkingTime(formatDuration(totalActiveMillis));
+        response.setTotalActiveWorkingTimeMillis(totalActiveMillis);
         response.setTotalWaitingTime(formatDuration(totalWaitingMillis));
         response.setColumnDetails(columnDetailsMap);
         response.setColumnHistory(columnHistory);
@@ -516,12 +627,17 @@ public class AnalyticsService {
 
         // 3. Statü Tiplerini Haritala
         Map<String, String> knownStatusTypes = new HashMap<>();
+        Map<String, Integer> statusOrderIndices = new HashMap<>();
         if (listEntity != null && listEntity.getStatuses() != null) {
             for (StatusDto status : listEntity.getStatuses()) {
-                if (status.status() != null && status.type() != null) {
-                    knownStatusTypes.put(
-                            status.status().toLowerCase(Locale.ROOT).trim(),
-                            status.type().toLowerCase(Locale.ROOT));
+                if (status.status() != null) {
+                    String normalizedStatus = status.status().toLowerCase(Locale.ROOT).trim();
+                    if (status.type() != null) {
+                        knownStatusTypes.put(normalizedStatus, status.type().toLowerCase(Locale.ROOT));
+                    }
+                    if (status.orderIndex() != null) {
+                        statusOrderIndices.put(normalizedStatus, status.orderIndex());
+                    }
                 }
             }
         }
@@ -605,9 +721,9 @@ public class AnalyticsService {
             List<Long> taskAssignees = assigneesByTaskId.getOrDefault(task.getId(), Collections.emptyList());
             List<TaskEvent> taskEvents = eventsByTaskId.getOrDefault(task.getId(), Collections.emptyList());
 
-            TaskAnalyticsResponse taskAnalytics = getComprehensiveAnalytics(task, taskEvents, knownStatusTypes,
-                    effectiveStart, taskAssignees, tagsByTaskId.getOrDefault(task.getId(), Collections.emptyList()),
-                    assigneeUsersById);
+            TaskAnalyticsResponse taskAnalytics = getComprehensiveAnalytics(
+                    task, taskEvents, knownStatusTypes, statusOrderIndices, effectiveStart, taskAssignees,
+                    tagsByTaskId.getOrDefault(task.getId(), Collections.emptyList()), assigneeUsersById);
             taskAnalytics.setSubtaskCount(subtaskCountsByTaskId.getOrDefault(task.getId(), 0));
             taskAnalytics.setSubtasks(subtasksByParentId.getOrDefault(task.getId(), Collections.emptyList()));
             if (task.getParent() != null) {

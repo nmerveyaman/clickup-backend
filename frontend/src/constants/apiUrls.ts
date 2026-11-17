@@ -21,6 +21,7 @@ export const API_URLS = {
     GET_AVAILABLE: (userId: string | number) => `${BASE_URL}/api/v1/workspaces/available?userId=${encodeURIComponent(userId)}`,
     GET_LISTS: (workspaceId: string) => `${BASE_URL}/api/v1/workspaces/lists?workspaceId=${encodeURIComponent(workspaceId)}`,
     GET_MEMBERS: (workspaceId: string) => `${BASE_URL}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/members`,
+    GET_MEMBER_ANALYTICS: (workspaceId: string) => `${BASE_URL}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/members/analytics`,
   },
 
   // Analitikler

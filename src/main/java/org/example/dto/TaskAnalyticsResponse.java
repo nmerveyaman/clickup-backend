@@ -24,6 +24,8 @@ public class TaskAnalyticsResponse {
     private String totalTaskDuration;
     private boolean stalled;
     private String totalActiveWorkingTime;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private long totalActiveWorkingTimeMillis;
     private String totalWaitingTime;
     private Map<Long, String> userActiveWorkingTimes;
     private Map<Long, String> userWaitingTimes;
@@ -85,4 +87,3 @@ public class TaskAnalyticsResponse {
             String statusType
     ) {}
 }
-
