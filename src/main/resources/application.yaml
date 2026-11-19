@@ -52,9 +52,9 @@ clickup:
 
 jwt:
   # 1 yıl boyunca sabit kalacak 256-bit güvenli anahtar (HS256)
-  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+  secret: ${JWT_SECRET}
   # 0 = Süresiz (Token zamana bağlı değişmez, hep aynı kalır ve süresi dolmaz)
-  expiration-ms: ${JWT_EXPIRATION_MS:0}
+  expiration-ms: ${JWT_EXPIRATION_MS:86400000}
 
 app:
   # OAuth sonrası kullanıcıların yönlendirileceği Frontend Dashboard adresi

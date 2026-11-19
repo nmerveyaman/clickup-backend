@@ -15,25 +15,30 @@ export const BASE_URL = rawBaseUrl
 export const API_URLS = {
   // Auth
   LOGIN: `${BASE_URL}/login`,
+  AUTH: {
+    EXCHANGE: `${BASE_URL}/api/v1/auth/exchange`,
+    ME: `${BASE_URL}/api/v1/auth/me`,
+    SELECT_WORKSPACE: `${BASE_URL}/api/v1/auth/workspace`,
+  },
 
   // Workspace / Sprint Listesi
   WORKSPACES: {
-    GET_AVAILABLE: (userId: string | number) => `${BASE_URL}/api/v1/workspaces/available?userId=${encodeURIComponent(userId)}`,
-    GET_LISTS: (workspaceId: string) => `${BASE_URL}/api/v1/workspaces/lists?workspaceId=${encodeURIComponent(workspaceId)}`,
-    GET_MEMBERS: (workspaceId: string) => `${BASE_URL}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/members`,
-    GET_MEMBER_ANALYTICS: (workspaceId: string) => `${BASE_URL}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/members/analytics`,
+    GET_AVAILABLE: `${BASE_URL}/api/v1/workspaces/available`,
+    GET_LISTS: `${BASE_URL}/api/v1/workspaces/lists`,
+    GET_MEMBERS: `${BASE_URL}/api/v1/workspaces/members`,
+    GET_MEMBER_ANALYTICS: `${BASE_URL}/api/v1/workspaces/members/analytics`,
   },
 
   // Analitikler
   ANALYTICS: {
     SPRINT_DETAILS: (listId: string) => `${BASE_URL}/api/analytics/sprint/${encodeURIComponent(listId)}`,
     TASK_DETAILS: (taskId: string) => `${BASE_URL}/api/analytics/task/${encodeURIComponent(taskId)}`,
-    USER_GANTT: (userId: number | string, listId?: string) =>
-      `${BASE_URL}/api/analytics/user/${userId}/gantt${listId ? `?listId=${encodeURIComponent(listId)}` : ''}`,
+    USER_GANTT: (listId?: string) =>
+      `${BASE_URL}/api/analytics/user/gantt${listId ? `?listId=${encodeURIComponent(listId)}` : ''}`,
   },
 
   // Real-time SSE
   EVENTS: {
-    STREAM: (workspaceId: string) => `${BASE_URL}/api/events/stream?workspaceId=${encodeURIComponent(workspaceId)}`,
+    STREAM: `${BASE_URL}/api/events/stream`,
   },
 };

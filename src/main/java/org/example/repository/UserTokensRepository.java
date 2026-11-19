@@ -16,6 +16,9 @@ public interface UserTokensRepository extends JpaRepository<UserTokens, Long> {
 
     Optional<UserTokens> findByUserIdAndWorkspaceId(Long userId, String workspaceId);
 
+    @EntityGraph(attributePaths = {"workspace"})
+    List<UserTokens> findByUserId(Long userId);
+
     @Transactional
     void deleteByUserId(Long userId);
 }

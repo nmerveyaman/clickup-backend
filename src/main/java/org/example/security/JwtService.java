@@ -27,11 +27,14 @@ public class JwtService {
         byte[] keyBytes;
         try {
             keyBytes = Decoders.BASE64.decode(jwtProperties.secret());
-            if (keyBytes.length < 32) {
-                keyBytes = jwtProperties.secret().getBytes(StandardCharsets.UTF_8);
-            }
         } catch (Exception e) {
             keyBytes = jwtProperties.secret().getBytes(StandardCharsets.UTF_8);
+        }
+        if (keyBytes.length < 32) {
+            keyBytes = jwtProperties.secret().getBytes(StandardCharsets.UTF_8);
+        }
+        if (keyBytes.length < 32) {
+            throw new IllegalStateException("JWT_SECRET must contain at least 256 bits of key material");
         }
         return Keys.hmacShaKeyFor(keyBytes);
     }
@@ -53,26 +56,28 @@ public class JwtService {
         return generateToken(extraClaims, String.valueOf(user.getId()));
     }
 
-    /**
-     * Token üretme metodu.
-     * expirationMs <= 0 olduğunda issuedAt ve expiration eklenmez.
-     * Böylece üretilen token hem süresiz olur hem de her çağrıda birebir aynı kalır.
-     */
     public String generateToken(Map<String, Object> extraClaims, String subject) {
-        var builder = Jwts.builder().claims(extraClaims).subject(subject).signWith(getSigningKey());
-
-        if (jwtProperties.expirationMs() > 0) {
-            long now = System.currentTimeMillis();
-            builder.issuedAt(new Date(now)).expiration(new Date(now + jwtProperties.expirationMs()));
+        if (jwtProperties.expirationMs() <= 0) {
+            throw new IllegalStateException("JWT_EXPIRATION_MS must be greater than zero");
         }
-
-        return builder.compact();
+        long now = System.currentTimeMillis();
+        return Jwts.builder()
+                .claims(extraClaims)
+                .subject(subject)
+                .issuedAt(new Date(now))
+                .expiration(new Date(now + jwtProperties.expirationMs()))
+                .signWith(getSigningKey())
+                .compact();
     }
 
     public boolean validateToken(String token) {
         try {
-            Jwts.parser().verifyWith(getSigningKey()).build().parseSignedClaims(token);
-            return true;
+            Claims claims = Jwts.parser().verifyWith(getSigningKey()).build().parseSignedClaims(token).getPayload();
+            Object userId = claims.get("userId");
+            return claims.getExpiration() != null
+                    && userId != null
+                    && String.valueOf(userId).equals(claims.getSubject())
+                    && Long.parseLong(String.valueOf(userId)) > 0;
         } catch (JwtException | IllegalArgumentException e) {
             log.warn("Geçersiz JWT Token: {}", e.getMessage());
             return false;

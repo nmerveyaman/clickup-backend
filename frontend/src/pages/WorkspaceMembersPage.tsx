@@ -15,6 +15,7 @@ import {
   Users,
 } from 'lucide-react';
 import { API_URLS } from '../constants/apiUrls';
+import { selectWorkspace } from '../utils/selectWorkspace';
 
 interface AssignedTask {
   taskId: string;
@@ -48,14 +49,69 @@ export default function WorkspaceMembersPage() {
   const [error, setError] = useState('');
   const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [workspaceId, setWorkspaceId] = useState('');
+  const [workspaceSwitching, setWorkspaceSwitching] = useState(false);
+  const [workspaces, setWorkspaces] = useState<{ id: string; name: string }[]>([]);
 
-  const queryParams = new URLSearchParams(window.location.search);
-  const workspaceId = queryParams.get('workspaceId') || localStorage.getItem('workspaceId');
+  const handleWorkspaceChange = async (nextWorkspaceId: string) => {
+    if (nextWorkspaceId === workspaceId || workspaceSwitching) return;
+    setWorkspaceSwitching(true);
+    try {
+      await selectWorkspace(nextWorkspaceId);
+      setWorkspaceId(nextWorkspaceId);
+      setExpandedMemberId(null);
+    } catch (switchError) {
+      console.error('Failed to switch workspace:', switchError);
+      setError(switchError instanceof Error ? switchError.message : 'Workspace selection failed.');
+    } finally {
+      setWorkspaceSwitching(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    const loadWorkspaces = async () => {
+      try {
+        const token = localStorage.getItem('accessToken');
+        const response = await fetch(API_URLS.WORKSPACES.GET_AVAILABLE, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!response.ok) throw new Error(`Workspace request failed (${response.status}).`);
+        const data = await response.json();
+        const available = Array.isArray(data?.workspaces) ? data.workspaces : [];
+        if (!active) return;
+        setWorkspaces(available);
+        if (available.length === 0) {
+          setError('No accessible workspace found for this account.');
+          setLoading(false);
+          return;
+        }
+        const preferred = data.defaultWorkspaceId;
+        const selectedWorkspaceId = available.some((workspace: { id: string }) => workspace.id === preferred)
+          ? preferred
+          : available[0]?.id || '';
+        if (!selectedWorkspaceId) {
+          throw new Error('No workspace is authorized for this ClickUp account.');
+        }
+        await selectWorkspace(selectedWorkspaceId);
+        setWorkspaceId(selectedWorkspaceId);
+      } catch (loadError) {
+        console.error('Failed to load workspace list:', loadError);
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : 'Failed to load workspace list.');
+          setLoading(false);
+        }
+      }
+    };
+    void loadWorkspaces();
+    return () => { active = false; };
+  }, []);
 
   const loadMembers = useCallback(async (signal: AbortSignal) => {
     if (!workspaceId) {
+      if (workspaces.length === 0) return;
       setMembers([]);
-      setError('No workspace selected. Select a workspace from the dashboard.');
+      setError('No accessible workspace found.');
       setLoading(false);
       return;
     }
@@ -67,7 +123,7 @@ export default function WorkspaceMembersPage() {
       const headers: Record<string, string> = {};
       if (token) headers.Authorization = `Bearer ${token}`;
 
-      const response = await fetch(API_URLS.WORKSPACES.GET_MEMBER_ANALYTICS(workspaceId), {
+      const response = await fetch(API_URLS.WORKSPACES.GET_MEMBER_ANALYTICS, {
         headers,
         signal,
       });
@@ -82,13 +138,13 @@ export default function WorkspaceMembersPage() {
     } finally {
       if (!signal.aborted) setLoading(false);
     }
-  }, [workspaceId]);
+  }, [workspaceId, workspaces.length]);
 
   useEffect(() => {
     const controller = new AbortController();
     void loadMembers(controller.signal);
     return () => controller.abort();
-  }, [loadMembers, refreshKey]);
+  }, [loadMembers, refreshKey, workspaceId, workspaces.length]);
 
   return (
     <div className="min-h-screen bg-[#0d1117] p-5 font-sans text-gray-100 sm:p-8">
@@ -110,15 +166,30 @@ export default function WorkspaceMembersPage() {
               <p className="mt-1 text-xs text-gray-400">Workspace members, assigned tasks, statuses, and time analytics</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setRefreshKey((key) => key + 1)}
-          disabled={loading}
-          className="flex items-center gap-2 rounded-xl border border-gray-800 bg-[#161b22] p-2.5 text-xs text-gray-300 transition hover:border-gray-700 hover:text-white disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {workspaces.length > 1 && (
+            <select
+              value={workspaceId}
+              onChange={(event) => { void handleWorkspaceChange(event.target.value); }}
+              disabled={workspaceSwitching}
+              aria-label="Select workspace"
+              className="max-w-56 rounded-xl border border-gray-800 bg-[#161b22] px-3 py-2.5 text-xs text-gray-200 outline-none focus:border-indigo-500"
+            >
+              {workspaces.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
+              ))}
+            </select>
+          )}
+          <button
+            type="button"
+            onClick={() => setRefreshKey((key) => key + 1)}
+            disabled={loading}
+            className="flex items-center gap-2 rounded-xl border border-gray-800 bg-[#161b22] p-2.5 text-xs text-gray-300 transition hover:border-gray-700 hover:text-white disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </header>
 
       {loading ? (

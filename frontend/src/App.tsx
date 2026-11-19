@@ -1,45 +1,76 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import WorkspaceMembersPage from './pages/WorkspaceMembersPage';
+import { API_URLS } from "./constants/apiUrls";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const searchParams = new URLSearchParams(location.search);
+  const [authState, setAuthState] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
 
-  // 1. URL'de OAuth redirect parametreleri var mı kontrol et
-  const urlToken = searchParams.get("token");
-  const urlUserId = searchParams.get("userId");
-  const urlUsername = searchParams.get("username");
-  const urlRole = searchParams.get("role");
-  const urlWorkspaceId = searchParams.get("workspaceId");
+  useEffect(() => {
+    let active = true;
+    const url = new URL(window.location.href);
+    const handoffCode = url.searchParams.get('code');
+    if (url.searchParams.has('code') || url.searchParams.has('token')
+      || url.searchParams.has('userId') || url.searchParams.has('username')
+      || url.searchParams.has('role') || url.searchParams.has('workspaceId')) {
+      for (const key of ['code', 'token', 'userId', 'username', 'role', 'workspaceId']) {
+        url.searchParams.delete(key);
+      }
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    }
 
-  // 2. URL'de token veya userId varsa senkronize olarak kaydet
-  if (urlToken) {
-    localStorage.setItem("accessToken", urlToken);
-    localStorage.setItem("token", urlToken);
-    localStorage.setItem("isLoggedIn", "true");
+    const authenticate = async () => {
+      try {
+        if (handoffCode) {
+          localStorage.removeItem('accessToken');
+          const exchangeResponse = await fetch(API_URLS.AUTH.EXCHANGE, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: handoffCode }),
+          });
+          if (!exchangeResponse.ok) {
+            throw new Error(`Authentication code exchange failed (${exchangeResponse.status})`);
+          }
+          const { access_token: accessToken } = await exchangeResponse.json() as { access_token: string };
+          localStorage.setItem('accessToken', accessToken);
+        }
+
+        const accessToken = localStorage.getItem('accessToken');
+        if (!accessToken) {
+          throw new Error('No access token');
+        }
+        const response = await fetch(API_URLS.AUTH.ME, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!response.ok) {
+          localStorage.removeItem('accessToken');
+          throw new Error(`Authentication validation failed (${response.status})`);
+        }
+
+        localStorage.setItem('isLoggedIn', 'true');
+        for (const key of ['userId', 'username', 'role', 'workspaceId', 'token']) {
+          localStorage.removeItem(key);
+        }
+        if (active) setAuthState('authenticated');
+      } catch (error) {
+        console.error('Authentication failed:', error);
+        if (active) setAuthState('unauthenticated');
+      }
+    };
+
+    void authenticate();
+    return () => {
+      active = false;
+    };
+  }, [location.key]);
+
+  if (authState === 'checking') {
+    return <div className="flex min-h-screen items-center justify-center bg-[#0d1117] text-sm text-gray-400">Validating session...</div>;
   }
-
-  if (urlUserId) {
-    localStorage.setItem("userId", urlUserId);
-    localStorage.setItem("isLoggedIn", "true");
-    if (urlUsername) localStorage.setItem("username", urlUsername);
-    if (urlRole) localStorage.setItem("role", urlRole);
-    if (urlWorkspaceId) localStorage.setItem("workspaceId", urlWorkspaceId);
-  }
-
-  // 3. LocalStorage oturum durumunu kontrol et
-  const isLoggedIn =
-    localStorage.getItem("isLoggedIn") === "true" ||
-    !!localStorage.getItem("accessToken") ||
-    !!localStorage.getItem("userId") ||
-    !!urlUserId ||
-    !!urlToken;
-
-  // 4. Oturum yoksa Login'e yönlendir
-  if (!isLoggedIn) {
+  if (authState === 'unauthenticated') {
     return <Navigate to="/login" replace />;
   }
 

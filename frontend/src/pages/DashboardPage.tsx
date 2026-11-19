@@ -28,7 +28,8 @@ import {
   CornerDownRight
 } from 'lucide-react';
 import { UserAvatar } from './UserAvatar';
-import { BASE_URL } from '../constants/apiUrls';
+import { API_URLS, BASE_URL } from '../constants/apiUrls';
+import { selectWorkspace } from '../utils/selectWorkspace';
 
 type TaskNotification = {
   id: string;
@@ -57,6 +58,9 @@ export default function DashboardPage() {
   const [selectedSprintId, setSelectedSprintId] = useState<string | null>(null);
   const [availableWorkspaces, setAvailableWorkspaces] = useState<{ id: string; name: string }[]>([]);
   const [workspaceLoadError, setWorkspaceLoadError] = useState('');
+  const [workspaceSwitching, setWorkspaceSwitching] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [authenticatedUser, setAuthenticatedUser] = useState<any>(null);
   const [sprintAnalytics, setSprintAnalytics] = useState<any>(null);
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const selectedTaskRef = useRef<any>(null);
@@ -67,12 +71,7 @@ export default function DashboardPage() {
   const [hoveredCol, setHoveredCol] = useState<string | null>(null);
   const donutSlices: any[] = [];
 
-  // Resolve the active workspace and user from the URL or local storage.
-  const queryParams = new URLSearchParams(window.location.search);
-  const [workspaceId, setWorkspaceId] = useState(
-    () => queryParams.get('workspaceId') || localStorage.getItem('workspaceId') || ''
-  );
-  const userId = queryParams.get('userId') || localStorage.getItem('userId');
+  const [workspaceId, setWorkspaceId] = useState('');
   const notificationStorageKey = `clickup-notifications:${workspaceId || 'unknown'}`;
   const selectedSprintIdRef = useRef(selectedSprintId);
   selectedSprintIdRef.current = selectedSprintId;
@@ -98,49 +97,68 @@ export default function DashboardPage() {
 
   // Sign out and clear the local session.
   const handleLogout = () => {
-    localStorage.removeItem('userId');
-    localStorage.removeItem('workspaceId');
-    localStorage.removeItem('username');
-    localStorage.removeItem('role');
     localStorage.removeItem('accessToken');
     localStorage.removeItem('isLoggedIn');
 
     navigate('/login', { replace: true });
   };
 
-  // Keep the dashboard behind the login screen when there is no session.
   useEffect(() => {
-    const tokenFromUrl = queryParams.get('token');
-    if (tokenFromUrl) {
-      localStorage.setItem('accessToken', tokenFromUrl);
-      localStorage.setItem('isLoggedIn', 'true');
-    }
-
-    if (!workspaceId && !userId) {
-      navigate('/login');
-    } else {
-      if (workspaceId) localStorage.setItem('workspaceId', workspaceId);
-      if (userId) localStorage.setItem('userId', userId);
-    }
-  }, [workspaceId, userId, navigate]);
+    let active = true;
+    const fetchCurrentUser = async () => {
+      try {
+        const token = localStorage.getItem('accessToken');
+        if (!token) {
+          navigate('/login', { replace: true });
+          return;
+        }
+        const response = await fetch(`${BASE_URL}/api/v1/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.status === 401) {
+          localStorage.removeItem('accessToken');
+          navigate('/login', { replace: true });
+          return;
+        }
+        if (!response.ok) throw new Error(`Current user request failed (${response.status})`);
+        const user = await response.json();
+        if (active) {
+          setAuthenticatedUser(user);
+          setUserId(String(user.id));
+        }
+      } catch (error) {
+        console.error('Failed to load authenticated user:', error);
+        if (active) setWorkspaceLoadError('Could not load your account.');
+      }
+    };
+    void fetchCurrentUser();
+    return () => { active = false; };
+  }, [navigate]);
 
   useEffect(() => {
-    if (!userId) return;
-
     const fetchWorkspaces = async () => {
       try {
         const token = localStorage.getItem('accessToken');
         const headers: Record<string, string> = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
-        const response = await fetch(
-          `${BASE_URL}/api/v1/workspaces/available?userId=${encodeURIComponent(userId)}`,
-          { headers }
-        );
+        const response = await fetch(`${BASE_URL}/api/v1/workspaces/available`, { headers });
         if (!response.ok) {
           throw new Error(`Workspace request failed (${response.status})`);
         }
-        setAvailableWorkspaces(await response.json());
+        const workspaceResponse = await response.json();
+        const workspaces = Array.isArray(workspaceResponse?.workspaces) ? workspaceResponse.workspaces : [];
+        setAvailableWorkspaces(workspaces);
+        const preferredWorkspaceId = workspaceResponse.defaultWorkspaceId
+          || authenticatedUser?.defaultWorkspaceId;
+        const initialWorkspaceId = workspaces.some((workspace: any) => workspace.id === preferredWorkspaceId)
+          ? preferredWorkspaceId
+          : workspaces[0]?.id || '';
+        if (!initialWorkspaceId) {
+          throw new Error('No workspace is authorized for this ClickUp account.');
+        }
+        await selectWorkspace(initialWorkspaceId);
+        setWorkspaceId(initialWorkspaceId);
         setWorkspaceLoadError('');
       } catch (error) {
         console.error('Failed to load workspaces:', error);
@@ -149,17 +167,24 @@ export default function DashboardPage() {
     };
 
     fetchWorkspaces();
-  }, [userId]);
+  }, []);
 
-  const handleWorkspaceChange = (nextWorkspaceId: string) => {
-    setWorkspaceId(nextWorkspaceId);
-    localStorage.setItem('workspaceId', nextWorkspaceId);
-    const params = new URLSearchParams(window.location.search);
-    params.set('workspaceId', nextWorkspaceId);
-    window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
-    setSprintList([]);
-    setSelectedSprintId(null);
-    setSprintAnalytics(null);
+  const handleWorkspaceChange = async (nextWorkspaceId: string) => {
+    if (nextWorkspaceId === workspaceId || workspaceSwitching) return;
+    setWorkspaceSwitching(true);
+    try {
+      await selectWorkspace(nextWorkspaceId);
+      setWorkspaceId(nextWorkspaceId);
+      setSprintList([]);
+      setSelectedSprintId(null);
+      setSprintAnalytics(null);
+      setWorkspaceLoadError('');
+    } catch (error) {
+      console.error('Failed to switch workspace:', error);
+      setWorkspaceLoadError(error instanceof Error ? error.message : 'Workspace selection failed.');
+    } finally {
+      setWorkspaceSwitching(false);
+    }
   };
 
   const fetchSprintAnalytics = useCallback(async (listId: string) => {
@@ -220,7 +245,7 @@ export default function DashboardPage() {
         const headers: Record<string, string> = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
-        const res = await fetch(`${BASE_URL}/api/v1/workspaces/lists?workspaceId=${encodeURIComponent(workspaceId)}`, { headers });
+        const res = await fetch(API_URLS.WORKSPACES.GET_LISTS, { headers });
         if (res.ok) {
           const data = await res.json();
           const lists = data.lists || data || [];
@@ -247,12 +272,14 @@ export default function DashboardPage() {
     }
 
     setStreamConnected(false);
-    const eventSource = new EventSource(
-      `${BASE_URL}/api/events/stream?workspaceId=${encodeURIComponent(workspaceId)}`
-    );
-
-    eventSource.onopen = () => setStreamConnected(true);
-    eventSource.onerror = () => setStreamConnected(false);
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+    const controller = new AbortController();
+    const handlers = new Map<string, (event: MessageEvent<string>) => void>();
+    const eventSource = {
+      addEventListener: (type: string, handler: (event: MessageEvent<string>) => void) => handlers.set(type, handler),
+      close: () => controller.abort(),
+    };
     eventSource.addEventListener('connected', () => setStreamConnected(true));
     eventSource.addEventListener('task-event', (event: MessageEvent<string>) => {
       try {
@@ -311,7 +338,7 @@ export default function DashboardPage() {
           const token = localStorage.getItem('accessToken');
           const headers: Record<string, string> = {};
           if (token) headers['Authorization'] = `Bearer ${token}`;
-          fetch(`${BASE_URL}/api/v1/workspaces/lists?workspaceId=${encodeURIComponent(workspaceId)}`, { headers })
+          fetch(API_URLS.WORKSPACES.GET_LISTS, { headers })
             .then(res => res.ok ? res.json() : null)
             .then(data => {
               if (data) {
@@ -383,7 +410,7 @@ export default function DashboardPage() {
           const headers: Record<string, string> = {};
           if (token) headers['Authorization'] = `Bearer ${token}`;
 
-          fetch(`${BASE_URL}/api/v1/workspaces/lists?workspaceId=${encodeURIComponent(workspaceId)}`, { headers })
+          fetch(API_URLS.WORKSPACES.GET_LISTS, { headers })
             .then(res => res.ok ? res.json() : Promise.reject(res.status))
             .then(data => {
               const lists = Array.isArray(data) ? data : (data.lists || []);
@@ -435,6 +462,66 @@ export default function DashboardPage() {
         console.error('Failed to process hierarchy event:', error);
       }
     });
+
+    const readEventStream = async () => {
+      const response = await fetch(
+        API_URLS.EVENTS.STREAM,
+        /*
+        { headers: { Authorization: `******, signal: controller.signal }
+        */
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        }
+      );
+      if (response.status === 401 || response.status === 403) {
+        console.error(`Notification stream authorization failed (${response.status}).`);
+        setStreamConnected(false);
+        return false;
+      }
+      if (!response.ok) throw new Error(`Notification stream failed (${response.status}).`);
+      if (!response.body) throw new Error('Notification stream response has no body.');
+      setStreamConnected(true);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (!controller.signal.aborted) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split(/\r?\n\r?\n/);
+        buffer = blocks.pop() || '';
+        for (const block of blocks) {
+          let eventName = 'message';
+          const dataLines: string[] = [];
+          for (const line of block.split(/\r?\n/)) {
+            if (line.startsWith('event:')) eventName = line.slice(6).trim();
+            else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+          }
+          const handler = handlers.get(eventName);
+          if (handler && dataLines.length > 0) {
+            handler(new MessageEvent<string>(eventName, { data: dataLines.join('\n') }));
+          }
+        }
+      }
+      setStreamConnected(false);
+      return !controller.signal.aborted;
+    };
+
+    void (async () => {
+      while (!controller.signal.aborted) {
+        try {
+          if (!await readEventStream()) break;
+        } catch (streamError) {
+          if (controller.signal.aborted) break;
+          console.error('Notification stream disconnected:', streamError);
+          setStreamConnected(false);
+        }
+        if (!controller.signal.aborted) {
+          await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        }
+      }
+    })();
 
     return () => {
       eventSource.close();
@@ -957,7 +1044,9 @@ export default function DashboardPage() {
     }).sort((a, b) => b.taskCount - a.taskCount);
   }, [sprintAnalytics]);
 
-  const currentUser = userId ? sprintAnalytics?.usersMap?.[userId] : null;
+  const currentUser = userId
+    ? sprintAnalytics?.usersMap?.[userId] || authenticatedUser
+    : authenticatedUser;
 
   return (
     <div className="flex h-screen bg-[#0d1117] text-gray-100 overflow-hidden font-sans">
@@ -974,7 +1063,7 @@ export default function DashboardPage() {
           <div className="p-3.5 flex items-center gap-3 border-b border-gray-800">
             <UserAvatar
               username={currentUser?.username || "Developer"}
-              profilePicture={currentUser?.profile_picture}
+              profilePicture={currentUser?.profile_picture || currentUser?.profilePicture}
               size={36}
             />
             {isSidebarHovered && (
@@ -1065,12 +1154,13 @@ export default function DashboardPage() {
         {/* Dashboard header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between xl:mb-8">
           <div className="flex flex-col gap-2">
-            {availableWorkspaces.length > 0 && (
+            {availableWorkspaces.length > 1 && (
               <label className="flex w-fit items-center gap-2 text-xs text-gray-400">
                 Workspace
                 <select
                   value={workspaceId}
                   onChange={(event) => handleWorkspaceChange(event.target.value)}
+                  disabled={workspaceSwitching}
                   className="rounded-lg border border-gray-700 bg-[#161b22] px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
                   aria-label="Select workspace"
                 >

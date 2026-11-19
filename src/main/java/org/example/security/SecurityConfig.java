@@ -4,8 +4,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -40,14 +38,11 @@ public class SecurityConfig {
                 // Yetkilendirme kuralları
                 .authorizeHttpRequests(auth -> auth
                         // OAuth giriş ve callback endpoint'leri herkese açık
-                        .requestMatchers("/login", "/api/auth/**", "/api/v1/auth/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/").permitAll()
-                        // SSE bildirim akışı
-                        .requestMatchers("/api/events/stream").permitAll()
+                        .requestMatchers("/login", "/api/auth/login", "/api/auth/callback",
+                                "/api/v1/auth/callback", "/api/v1/auth/exchange").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/").permitAll()
                         // ClickUp webhook is authenticated by its signature in WebhookIngestionService
                         .requestMatchers("/api/webhooks/**").permitAll()
-                        // Workspace ve Analitik endpoint'leri
-                        .requestMatchers("/api/v1/workspaces/**", "/api/analytics/**").permitAll()
                         // Swagger & OpenAPI dokümantasyonu herkese açık
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         // Actuator sağlık kontrolü herkese açık

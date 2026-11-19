@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.repository.UserTokensRepository;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -20,6 +21,7 @@ import java.io.IOException;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final UserTokensRepository userTokensRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -37,6 +39,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String username = jwtService.extractUsername(token);
                 String workspaceId = jwtService.extractWorkspaceId(token);
                 String role = jwtService.extractRole(token);
+
+                if (workspaceId == null || workspaceId.isBlank()
+                        || userTokensRepository.findByUserIdAndWorkspaceId(userId, workspaceId).isEmpty()) {
+                    log.warn("JWT rejected because user {} has no ClickUp authorization for workspace {}",
+                            userId, workspaceId);
+                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Workspace authorization is unavailable");
+                    return;
+                }
 
                 // 1. Spring Security UserPrincipal nesnesini oluştur
                 UserPrincipal principal = UserPrincipal.create(userId, username, email, role, workspaceId);
