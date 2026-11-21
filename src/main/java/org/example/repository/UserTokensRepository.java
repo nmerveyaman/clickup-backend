@@ -10,13 +10,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public interface UserTokensRepository extends JpaRepository<UserTokens, Long> {
+
     @Override
     @EntityGraph(attributePaths = {"user", "workspace"})
     List<UserTokens> findAll();
 
+    @EntityGraph(attributePaths = {"user", "workspace"})
     Optional<UserTokens> findByUserIdAndWorkspaceId(Long userId, String workspaceId);
 
-    @EntityGraph(attributePaths = {"workspace"})
+    @EntityGraph(attributePaths = {"user", "workspace"})
     List<UserTokens> findByUserId(Long userId);
 
     @Transactional
