@@ -21,7 +21,9 @@ public class ClickUpSyncScheduler {
     private final ClickUpFullSyncService clickUpFullSyncService;
     private final ClickUpWebhookSyncService clickUpWebhookSyncService;
 
-    @Scheduled(fixedDelayString = "${app.sync.interval-ms:600000}")
+    @Scheduled(
+            initialDelayString = "${app.sync.initial-delay-ms:60000}",
+            fixedDelayString = "${app.sync.interval-ms:600000}")
     public void runPeriodicSync() {
         log.info("Scheduled ClickUp sync started");
         Set<String> refreshedTokens = new HashSet<>();

@@ -55,6 +55,7 @@ public class WorkspaceController {
      * GET /api/v1/workspaces/available
      */
     @GetMapping("/available")
+    @Transactional(readOnly = true)
     public ResponseEntity<AvailableWorkspacesDto> getAvailableWorkspaces(
             @AuthenticationPrincipal UserPrincipal principal) {
         java.util.Set<String> authorizedWorkspaceIds = userTokensRepository.findByUserId(principal.getId()).stream()
@@ -74,8 +75,8 @@ public class WorkspaceController {
                 .toList();
         String defaultWorkspaceId = workspaces.stream()
                 .anyMatch(workspace -> workspace.id().equals(principal.getWorkspaceId()))
-                        ? principal.getWorkspaceId()
-                        : workspaces.isEmpty() ? null : workspaces.get(0).id();
+                ? principal.getWorkspaceId()
+                : workspaces.isEmpty() ? null : workspaces.get(0).id();
         return ResponseEntity.ok(new AvailableWorkspacesDto(defaultWorkspaceId, workspaces));
     }
 
@@ -109,6 +110,7 @@ public class WorkspaceController {
      * GET /api/v1/workspaces/members
      */
     @GetMapping("/members")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getWorkspaceMembers(
             @AuthenticationPrincipal UserPrincipal principal) {
         String workspaceId = requireCurrentWorkspace(principal);
@@ -150,8 +152,8 @@ public class WorkspaceController {
         Map<String, List<TaskEvent>> eventsByTaskId = taskIds.isEmpty()
                 ? Collections.emptyMap()
                 : taskEventRepository.findByTaskIdIn(taskIds).stream()
-                        .filter(event -> event.getTask() != null)
-                        .collect(Collectors.groupingBy(event -> event.getTask().getId()));
+                .filter(event -> event.getTask() != null)
+                .collect(Collectors.groupingBy(event -> event.getTask().getId()));
         Map<String, List<Long>> assigneeIdsByTaskId = new HashMap<>();
         if (!taskIds.isEmpty()) {
             for (TaskAssignee assignment : taskAssigneeRepository.findByTaskIdIn(taskIds)) {

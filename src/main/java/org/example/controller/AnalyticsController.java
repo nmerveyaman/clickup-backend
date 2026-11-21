@@ -17,6 +17,7 @@ import org.example.services.AnalyticsService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -38,6 +39,7 @@ public class AnalyticsController {
      * 1. Tekil Görev (Task) Kapsamlı Analiz Endpoint'i
      */
     @GetMapping("/task/{taskId}")
+    @Transactional(readOnly = true)
     public ResponseEntity<TaskAnalyticsResponse> getTaskAnalytics(
             @PathVariable String taskId,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -57,6 +59,7 @@ public class AnalyticsController {
      * 2. Sprint (List) Bazlı Toplu Özet Analiz Endpoint'i
      */
     @GetMapping("/sprint/{listId}")
+    @Transactional(readOnly = true)
     public ResponseEntity<SprintAnalyticsResponse> getSprintAnalytics(
             @PathVariable String listId,
             @AuthenticationPrincipal UserPrincipal principal) {
@@ -82,6 +85,7 @@ public class AnalyticsController {
      * (Belirli bir sprint için ?listId=... gönderilebilir; gönderilmezse kullanıcının tüm görevlerini tarar)
      */
     @GetMapping("/user/gantt")
+    @Transactional(readOnly = true)
     public ResponseEntity<UserGanttAnalyticsResponse> getUserGanttAnalytics(
             @RequestParam(required = false) String listId,
             @AuthenticationPrincipal UserPrincipal principal) {

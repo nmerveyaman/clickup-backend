@@ -1,5 +1,6 @@
 package org.example.security;
 
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -37,17 +38,18 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // Yetkilendirme kuralları
                 .authorizeHttpRequests(auth -> auth
+                        // SSE (ASYNC) ve hata (ERROR) iç yönlendirmelerinde Access Denied oluşmasını engelle
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
+                        .requestMatchers("/error").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                         // OAuth giriş ve callback endpoint'leri herkese açık
                         .requestMatchers("/login", "/api/auth/login", "/api/auth/callback",
                                 "/api/v1/auth/callback", "/api/v1/auth/exchange").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/").permitAll()
-                        // ClickUp webhook is authenticated by its signature in WebhookIngestionService
-                        .requestMatchers("/api/webhooks/**").permitAll()
-                        // Swagger & OpenAPI dokümantasyonu herkese açık
+                        // WebhookController'daki iki path'e de izin ver
+                        .requestMatchers("/api/webhooks/**", "/api/v1/webhook/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        // Actuator sağlık kontrolü herkese açık
                         .requestMatchers("/actuator/**").permitAll()
-                        // Diğer tüm endpoint'ler JWT ile yetkilendirme gerektirir
                         .anyRequest().authenticated()
                 )
                 // Yetkisiz erişimlerde 401 Unauthorized dön

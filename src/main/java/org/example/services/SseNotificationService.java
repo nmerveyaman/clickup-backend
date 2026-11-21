@@ -1,6 +1,7 @@
 package org.example.services;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -80,5 +81,17 @@ public class SseNotificationService {
             }
         }
     }
-}
 
+    @Scheduled(fixedRate = 25000)
+    public void sendHeartbeat() {
+        emitters.forEach((workspaceId, list) -> {
+            for (SseEmitter emitter : list) {
+                try {
+                    emitter.send(SseEmitter.event().comment("keepalive"));
+                } catch (Exception e) {
+                    removeEmitter(workspaceId, emitter);
+                }
+            }
+        });
+    }
+}

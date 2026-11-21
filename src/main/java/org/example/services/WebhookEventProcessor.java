@@ -65,6 +65,7 @@ public class WebhookEventProcessor {
     private final SpaceRepository spaceRepository;
     private final FolderRepository folderRepository;
     private final ListMapper listMapper;
+    private final SpaceService spaceService;
 
     @Transactional
     public void process(WebhookIngestionPayload payload) {
@@ -691,24 +692,67 @@ public class WebhookEventProcessor {
 
     private void syncListFromClickup(WebhookIngestionPayload payload, String listId) {
         String accessToken = resolveAccessToken(payload);
-        if (accessToken == null) return;
+        if (accessToken == null) {
+            return;
+        }
         try {
             ListResponseDto.ListDto listDto = clickupClient.getList(listId, accessToken);
-            if (listDto != null) {
-                Lists list = listRepository.findById(listId).orElseGet(Lists::new);
-                listMapper.updateEntityFromDto(listDto, list);
-                if (listDto.space() != null && listDto.space().id() != null) {
-                    spaceRepository.findById(listDto.space().id()).ifPresent(list::setSpace);
-                }
-                if (listDto.folder() != null && listDto.folder().id() != null) {
-                    folderRepository.findById(listDto.folder().id()).ifPresent(list::setFolder);
-                }
-                listRepository.save(list);
-                log.info("List {} webhook ile DB'ye senkronize edildi: name={}", listId, list.getName());
+            if (listDto == null) {
+                return;
             }
+
+            Lists list = listRepository.findById(listId).orElseGet(Lists::new);
+            if (list.getId() == null) {
+                list.setId(listId);
+            }
+            listMapper.updateEntityFromDto(listDto, list);
+
+            // 1. Önce Folder'ı bağla
+            if (listDto.folder() != null && listDto.folder().id() != null) {
+                folderRepository.findById(listDto.folder().id()).ifPresent(list::setFolder);
+            }
+
+            // 2. Space çözümle: DB -> Folder üzerinden -> ClickUp Space sync
+            if (listDto.space() != null && listDto.space().id() != null) {
+                String spaceId = listDto.space().id();
+                var spaceOpt = spaceRepository.findById(spaceId);
+
+                if (spaceOpt.isEmpty()) {
+                    String workspaceId = resolveWorkspaceIdFromWebhook(payload);
+                    if (workspaceId != null) {
+                        spaceService.syncSpaces(workspaceId, accessToken);
+                        spaceOpt = spaceRepository.findById(spaceId);
+                    }
+                }
+                spaceOpt.ifPresent(list::setSpace);
+            }
+
+            // 3. Hala space yoksa, bağlı olduğu folder'ın space'ini kullan
+            if (list.getSpace() == null && list.getFolder() != null && list.getFolder().getSpace() != null) {
+                list.setSpace(list.getFolder().getSpace());
+            }
+
+            // 4. Space çözülemediyse save() çağırıp Hibernate session'ını bozma
+            if (list.getSpace() == null) {
+                log.warn("List {} için space_id çözülemedi (dto.space={}), DB kaydı atlanıyor.",
+                        listId, listDto.space() != null ? listDto.space().id() : "null");
+                return;
+            }
+
+            listRepository.save(list);
+            log.info("List {} webhook ile DB'ye senkronize edildi: name={}", listId, list.getName());
         } catch (Exception e) {
             log.warn("List {} ClickUp API'den çekilemedi: {}", listId, e.getMessage());
         }
+    }
+
+    private String resolveWorkspaceIdFromWebhook(WebhookIngestionPayload payload) {
+        if (payload == null || payload.getWebhookId() == null) {
+            return null;
+        }
+        return webhookRepository.findById(payload.getWebhookId())
+                .map(w -> w.getWorkspace() == null ? null : w.getWorkspace().getId())
+                .orElse(null);
     }
 
     private void saveHierarchyEvent(
